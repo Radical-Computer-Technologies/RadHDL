@@ -1,0 +1,287 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+library xpm;
+use xpm.vcomponents.all;
+
+entity RadILA is
+  generic (
+    SAMPLE_WIDTH : integer := 32;
+    EVENT_WIDTH  : integer := 8;
+    DEPTH        : integer := 1024;
+    ADDR_WIDTH   : integer := 10;
+    CMD_LANES    : integer := 4;
+    VENDOR_TAG   : string  := "XILINX";
+    PRODUCT_SERIES_TAG : string := "7SERIES"
+  );
+  port (
+    sample_clk       : in  std_logic;
+    sample_rstn      : in  std_logic;
+    axi_clk          : in  std_logic;
+    axi_rstn         : in  std_logic;
+    sample_i         : in  std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
+    event_i          : in  std_logic_vector(EVENT_WIDTH - 1 downto 0);
+    cmd_data_i       : in  std_logic_vector(CMD_LANES - 1 downto 0);
+    cmd_toggle_i     : in  std_logic;
+    cmd_ack_toggle_o : out std_logic;
+    rd_index_i       : in  unsigned(ADDR_WIDTH - 1 downto 0);
+    rd_data_o        : out std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
+    sample_now_o     : out std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
+    event_now_o      : out std_logic_vector(EVENT_WIDTH - 1 downto 0);
+    armed_o          : out std_logic;
+    capturing_o      : out std_logic;
+    done_o           : out std_logic;
+    overflow_o       : out std_logic;
+    count_o          : out unsigned(ADDR_WIDTH downto 0)
+  );
+end entity;
+
+architecture rtl of RadILA is
+  type state_t is (IDLE, PREARMED, CAPTURE_POST, COMPLETE);
+  constant CMD_WIDTH : integer := 4 + (2 * EVENT_WIDTH) + ADDR_WIDTH;
+
+  signal state       : state_t := IDLE;
+  signal wr_ptr      : unsigned(ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal sample_cnt  : unsigned(ADDR_WIDTH downto 0) := (others => '0');
+  signal post_cnt    : unsigned(ADDR_WIDTH downto 0) := (others => '0');
+  signal captured    : unsigned(ADDR_WIDTH downto 0) := (others => '0');
+  signal overflow    : std_logic := '0';
+  signal ram_we      : std_logic_vector(0 downto 0) := (others => '0');
+  signal wr_addr     : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal rd_addr     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal unused_douta : std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
+  signal trigger_match : std_logic;
+  signal cmd_toggle_d : std_logic := '0';
+  signal cmd_shift    : std_logic_vector(CMD_WIDTH - 1 downto 0) := (others => '0');
+  signal cmd_count    : natural range 0 to CMD_WIDTH - 1 := 0;
+  signal cmd_ack      : std_logic := '0';
+  signal arm_pulse    : std_logic := '0';
+  signal clear_pulse  : std_logic := '0';
+  signal sw_pulse     : std_logic := '0';
+  signal auto_rearm   : std_logic := '0';
+  signal trig_mask    : std_logic_vector(EVENT_WIDTH - 1 downto 0) := (others => '0');
+  signal trig_value   : std_logic_vector(EVENT_WIDTH - 1 downto 0) := (others => '0');
+  signal posttrig     : unsigned(ADDR_WIDTH - 1 downto 0) := to_unsigned(255, ADDR_WIDTH);
+
+  function cap_count(v : unsigned(ADDR_WIDTH - 1 downto 0)) return unsigned is
+  begin
+    return resize(v, ADDR_WIDTH + 1);
+  end function;
+
+  type ram_t is array (0 to DEPTH - 1) of std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
+  signal generic_ram : ram_t := (others => (others => '0'));
+  attribute ram_style : string;
+  attribute ram_style of generic_ram : signal is "block";
+begin
+  trigger_match <= '1' when ((event_i and trig_mask) = (trig_value and trig_mask)) else '0';
+  cmd_ack_toggle_o <= cmd_ack;
+  rd_addr <= std_logic_vector(rd_index_i);
+
+  gen_xilinx_ram : if VENDOR_TAG = "XILINX" generate
+  begin
+    i_capture_ram : xpm_memory_tdpram
+      generic map (
+        MEMORY_SIZE        => DEPTH * SAMPLE_WIDTH,
+        MEMORY_PRIMITIVE   => "block",
+        CLOCKING_MODE      => "independent_clock",
+        ECC_MODE           => "no_ecc",
+        MEMORY_INIT_FILE   => "none",
+        USE_MEM_INIT       => 0,
+        WAKEUP_TIME        => "disable_sleep",
+        MESSAGE_CONTROL    => 0,
+        WRITE_DATA_WIDTH_A => SAMPLE_WIDTH,
+        READ_DATA_WIDTH_A  => SAMPLE_WIDTH,
+        BYTE_WRITE_WIDTH_A => SAMPLE_WIDTH,
+        ADDR_WIDTH_A       => ADDR_WIDTH,
+        READ_RESET_VALUE_A => "0",
+        READ_LATENCY_A     => 1,
+        WRITE_MODE_A       => "no_change",
+        WRITE_DATA_WIDTH_B => SAMPLE_WIDTH,
+        READ_DATA_WIDTH_B  => SAMPLE_WIDTH,
+        BYTE_WRITE_WIDTH_B => SAMPLE_WIDTH,
+        ADDR_WIDTH_B       => ADDR_WIDTH,
+        READ_RESET_VALUE_B => "0",
+        READ_LATENCY_B     => 1,
+        WRITE_MODE_B       => "read_first"
+      )
+      port map (
+        sleep          => '0',
+        clka           => sample_clk,
+        rsta           => not sample_rstn,
+        ena            => '1',
+        regcea         => '1',
+        wea            => ram_we,
+        addra          => wr_addr,
+        dina           => sample_i,
+        injectsbiterra => '0',
+        injectdbiterra => '0',
+        douta          => unused_douta,
+        sbiterra       => open,
+        dbiterra       => open,
+        clkb           => axi_clk,
+        rstb           => not axi_rstn,
+        enb            => '1',
+        regceb         => '1',
+        web            => (others => '0'),
+        addrb          => rd_addr,
+        dinb           => (others => '0'),
+        injectsbiterrb => '0',
+        injectdbiterrb => '0',
+        doutb          => rd_data_o,
+        sbiterrb       => open,
+        dbiterrb       => open
+      );
+  end generate;
+
+  gen_generic_ram : if VENDOR_TAG /= "XILINX" generate
+  begin
+    unused_douta <= (others => '0');
+
+    process(sample_clk)
+    begin
+      if rising_edge(sample_clk) then
+        if ram_we(0) = '1' then
+          generic_ram(to_integer(unsigned(wr_addr))) <= sample_i;
+        end if;
+      end if;
+    end process;
+
+    process(axi_clk)
+    begin
+      if rising_edge(axi_clk) then
+        rd_data_o <= generic_ram(to_integer(unsigned(rd_addr)));
+      end if;
+    end process;
+  end generate;
+
+  process(sample_clk)
+    variable next_ptr : unsigned(ADDR_WIDTH - 1 downto 0);
+    variable next_cmd_shift : std_logic_vector(CMD_WIDTH - 1 downto 0);
+    variable bit_index      : natural;
+  begin
+    if rising_edge(sample_clk) then
+      ram_we <= (others => '0');
+      wr_addr <= std_logic_vector(wr_ptr);
+      sample_now_o <= sample_i;
+      event_now_o <= event_i;
+      arm_pulse <= '0';
+      clear_pulse <= '0';
+      sw_pulse <= '0';
+
+      if cmd_toggle_i /= cmd_toggle_d then
+        next_cmd_shift := cmd_shift;
+        for lane in 0 to CMD_LANES - 1 loop
+          bit_index := cmd_count + lane;
+          if bit_index < CMD_WIDTH then
+            next_cmd_shift(bit_index) := cmd_data_i(lane);
+          end if;
+        end loop;
+        cmd_shift <= next_cmd_shift;
+        cmd_toggle_d <= cmd_toggle_i;
+        cmd_ack <= not cmd_ack;
+        if cmd_count + CMD_LANES >= CMD_WIDTH then
+          arm_pulse <= next_cmd_shift(0);
+          clear_pulse <= next_cmd_shift(1);
+          sw_pulse <= next_cmd_shift(2);
+          auto_rearm <= next_cmd_shift(3);
+          trig_mask <= next_cmd_shift(3 + EVENT_WIDTH downto 4);
+          trig_value <= next_cmd_shift(3 + (2 * EVENT_WIDTH) downto 4 + EVENT_WIDTH);
+          posttrig <= unsigned(next_cmd_shift(CMD_WIDTH - 1 downto 4 + (2 * EVENT_WIDTH)));
+          cmd_count <= 0;
+        else
+          cmd_count <= cmd_count + CMD_LANES;
+        end if;
+      end if;
+
+      if sample_rstn = '0' or clear_pulse = '1' then
+        state <= IDLE;
+        wr_ptr <= (others => '0');
+        sample_cnt <= (others => '0');
+        post_cnt <= (others => '0');
+        captured <= (others => '0');
+        overflow <= '0';
+        cmd_count <= 0;
+        cmd_shift <= (others => '0');
+        cmd_toggle_d <= cmd_toggle_i;
+        arm_pulse <= '0';
+        clear_pulse <= '0';
+        sw_pulse <= '0';
+        auto_rearm <= '0';
+        trig_mask <= (others => '0');
+        trig_value <= (others => '0');
+        posttrig <= to_unsigned(255, ADDR_WIDTH);
+      else
+        next_ptr := wr_ptr + 1;
+
+        case state is
+          when IDLE =>
+            if arm_pulse = '1' then
+              state <= PREARMED;
+              wr_ptr <= (others => '0');
+              sample_cnt <= (others => '0');
+              post_cnt <= (others => '0');
+              captured <= (others => '0');
+              overflow <= '0';
+            end if;
+
+          when PREARMED =>
+            ram_we(0) <= '1';
+            wr_ptr <= next_ptr;
+            if sample_cnt < to_unsigned(DEPTH, sample_cnt'length) then
+              sample_cnt <= sample_cnt + 1;
+            else
+              overflow <= '1';
+            end if;
+
+            if trigger_match = '1' or sw_pulse = '1' then
+              state <= CAPTURE_POST;
+              post_cnt <= (others => '0');
+            end if;
+
+          when CAPTURE_POST =>
+            ram_we(0) <= '1';
+            wr_ptr <= next_ptr;
+            if sample_cnt < to_unsigned(DEPTH, sample_cnt'length) then
+              sample_cnt <= sample_cnt + 1;
+            else
+              overflow <= '1';
+            end if;
+            post_cnt <= post_cnt + 1;
+
+            if post_cnt >= cap_count(posttrig) then
+              if sample_cnt > to_unsigned(DEPTH, sample_cnt'length) then
+                captured <= to_unsigned(DEPTH, captured'length);
+              else
+                captured <= sample_cnt;
+              end if;
+              state <= COMPLETE;
+            end if;
+
+          when COMPLETE =>
+            if auto_rearm = '1' then
+              state <= PREARMED;
+              wr_ptr <= (others => '0');
+              sample_cnt <= (others => '0');
+              post_cnt <= (others => '0');
+              captured <= (others => '0');
+              overflow <= '0';
+            elsif arm_pulse = '1' then
+              state <= PREARMED;
+              wr_ptr <= (others => '0');
+              sample_cnt <= (others => '0');
+              post_cnt <= (others => '0');
+              captured <= (others => '0');
+              overflow <= '0';
+            end if;
+        end case;
+      end if;
+    end if;
+  end process;
+
+  armed_o <= '1' when state = PREARMED or state = CAPTURE_POST else '0';
+  capturing_o <= '1' when state = CAPTURE_POST else '0';
+  done_o <= '1' when state = COMPLETE else '0';
+  overflow_o <= overflow;
+  count_o <= captured when state = COMPLETE else sample_cnt;
+end architecture;
