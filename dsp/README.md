@@ -1,12 +1,13 @@
 # raddsp VHDL IP Project
 
-`raddsp` packages the reusable DSP blocks used by the Neuma calibration DSP flow:
+`raddsp` packages reusable DSP blocks for RadHDL-consuming calibration and capture flows:
 
 - Zadoff-Chu/chirp frame detector
 - CORDIC `atan2` phase estimator
 - RAM-backed radix-2 FFT batch core
 
-This copy is vendored into `neural_machine_os` so the `neuma-ad936x-3eg-s21-dsp` project can build without depending on a separate external workspace tree.
+This source is owned by RadHDL. Consuming projects should reference it through
+their RadTools/RadHDL submodule or set `RADHDL_DIR`.
 
 The current release path is Vivado IP packaging plus generated `.xci` instances. IEEE-1735 encryption is intentionally not used for now because this Vivado install found the AMD public key but is not licensed for encryption.
 
@@ -66,23 +67,22 @@ Default XCI configuration:
 - FFT: 32 points, 16-bit input/twiddle, 32-bit output, UltraScale+ defaults
 - ZC detector: 1024-frame samples, 512 chirp samples, 16-bit IQ, 40-bit accumulator
 
-## Consume From Neuma DSP
+## Consume From Project DSP
 
-The Neuma DSP package scripts look for this sibling project by default:
+Project DSP package scripts should look for RadHDL by default:
 
 ```text
-../raddsp-vhdl/hdl/iprepo
-../raddsp-vhdl/hdl/xci
+RadTools/RadHDL/dsp/hdl/xci
 ```
 
 Override paths if needed:
 
 ```bash
-export RADDSP_IP_REPO_DIR=/path/to/raddsp-vhdl/hdl/iprepo
-export RADDSP_XCI_DIR=/path/to/raddsp-vhdl/hdl/xci
+export RADHDL_DIR=/path/to/RadHDL
+export RADDSP_XCI_DIR=/path/to/RadHDL/dsp/hdl/xci
 ```
 
-Then run from the Neuma DSP project:
+Then run from the consuming DSP project:
 
 ```bash
 source <vivado-2023.1-settings64.sh>
