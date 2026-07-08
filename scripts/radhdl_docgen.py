@@ -727,6 +727,8 @@ def dsp_package_group(module: ModuleDoc) -> str:
 
 def interface_include_package(module: ModuleDoc) -> str:
     name = module.name.lower()
+    if "i2s" in name:
+        return "interfaces_i2s"
     if "i2c" in name:
         return "interfaces_i2c"
     if "smi" in name:

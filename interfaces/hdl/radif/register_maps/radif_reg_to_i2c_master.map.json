@@ -1,0 +1,44 @@
+{
+  "name": "radif_reg_to_i2c_master",
+  "description": "Software-visible register map for the RADIF register-controlled I2C master.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "radif_reg_to_i2c_master",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Controls one-byte I2C read/write transactions and SCL timing.",
+      "registers": [
+        {
+          "name": "control",
+          "offset": "0x0000",
+          "access": "rw",
+          "description": "Control register used to launch and clear I2C transactions.",
+          "fields": [
+            { "name": "START", "bits": "0", "description": "Starts a one-byte I2C transaction when the master is idle." },
+            { "name": "CLEAR", "bits": "1", "description": "Clears sticky done and error status." },
+            { "name": "READ", "bits": "2", "description": "Selects read transaction when set, write transaction when clear." }
+          ]
+        },
+        {
+          "name": "status",
+          "offset": "0x0004",
+          "access": "ro",
+          "description": "I2C master transaction status.",
+          "fields": [
+            { "name": "BUSY", "bits": "0", "description": "Master is actively driving an I2C transaction." },
+            { "name": "DONE", "bits": "1", "description": "Last transaction completed." },
+            { "name": "ACK_ERR", "bits": "2", "description": "Slave did not acknowledge the address or write data byte." }
+          ]
+        },
+        { "name": "clk_div", "offset": "0x0008", "access": "rw", "description": "SCL half-period divider. SCL phase changes every clk_div + 1 FPGA clock cycles." },
+        { "name": "slave_addr", "offset": "0x000C", "access": "rw", "description": "7-bit I2C slave address used for the next transaction." },
+        { "name": "tx_data", "offset": "0x0010", "access": "rw", "description": "Write data byte used for write transactions." },
+        { "name": "rx_data", "offset": "0x0014", "access": "ro", "description": "Read data byte captured from the last read transaction." }
+      ]
+    }
+  ]
+}

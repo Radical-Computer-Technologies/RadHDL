@@ -1,0 +1,54 @@
+{
+  "name": "radif_reg_to_spi_master",
+  "description": "Software-visible register map for the RADIF register-controlled SPI master.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "radif_reg_to_spi_master",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Controls single-word SPI transfers, SCLK timing, transfer width, and SPI mode.",
+      "registers": [
+        {
+          "name": "control",
+          "offset": "0x0000",
+          "access": "rw",
+          "description": "Control register used to launch and clear SPI transactions.",
+          "fields": [
+            { "name": "START", "bits": "0", "description": "Starts a single-word SPI transfer when the master is idle." },
+            { "name": "CLEAR", "bits": "1", "description": "Clears sticky done and error status." }
+          ]
+        },
+        {
+          "name": "status",
+          "offset": "0x0004",
+          "access": "ro",
+          "description": "SPI master transaction status.",
+          "fields": [
+            { "name": "BUSY", "bits": "0", "description": "Master is actively shifting an SPI transfer." },
+            { "name": "DONE", "bits": "1", "description": "Last SPI transfer completed." },
+            { "name": "ERR", "bits": "2", "description": "Start was requested while the master was busy or a register error occurred." }
+          ]
+        },
+        { "name": "clk_div", "offset": "0x0008", "access": "rw", "description": "SCLK half-period divider. SCLK changes every clk_div + 1 FPGA clock cycles." },
+        {
+          "name": "config",
+          "offset": "0x000C",
+          "access": "rw",
+          "description": "SPI clock mode and transfer width configuration.",
+          "fields": [
+            { "name": "CPOL", "bits": "0", "description": "SPI clock polarity." },
+            { "name": "CPHA", "bits": "1", "description": "SPI clock phase." },
+            { "name": "CS_ACTIVE_HIGH", "bits": "2", "description": "Inverts chip-select polarity when set." },
+            { "name": "BIT_COUNT", "bits": "15:8", "description": "Number of bits shifted in each transfer." }
+          ]
+        },
+        { "name": "tx_data", "offset": "0x0010", "access": "rw", "description": "MSB-first transmit word for the next SPI transfer." },
+        { "name": "rx_data", "offset": "0x0014", "access": "ro", "description": "MSB-first receive word captured from the last SPI transfer." }
+      ]
+    }
+  ]
+}

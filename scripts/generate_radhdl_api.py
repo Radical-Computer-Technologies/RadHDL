@@ -55,6 +55,7 @@ DSP_GROUPS: dict[str, tuple[str, ...]] = {
 }
 
 INTERFACE_GROUPS: dict[str, tuple[str, ...]] = {
+    "interfaces_i2s": ("i2s",),
     "interfaces_i2c": ("i2c",),
     "interfaces_smi": ("smi",),
     "interfaces_spi": ("spi", "qspi"),

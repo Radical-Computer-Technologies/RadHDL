@@ -207,6 +207,222 @@ package interfaces is
     );
   end component;
 
+  -- Component declaration sourced from interfaces/hdl/radif/src/radif_i2s_axis.vhd.
+  component radif_i2s_axis is
+    generic (
+      -- Sample width per left/right channel.
+      SAMPLE_WIDTH       : positive := 24;
+      -- AXI-Stream payload width. The low half carries right-channel data and the high half carries left-channel data.
+      AXIS_DATA_WIDTH    : positive := 64;
+      -- Width of the RADIF register data bus.
+      REG_DATA_WIDTH     : positive := 32;
+      -- Width of the RADIF register address bus.
+      REG_ADDR_WIDTH     : positive := 16;
+      -- Default MCLK half-period divider. Ignored when GENERATE_MCLK is false.
+      DEFAULT_MCLK_DIV   : natural  := 1;
+      -- Default BCLK half-period divider used when USE_EXTERNAL_BCLK is false.
+      DEFAULT_BCLK_DIV   : natural  := 7;
+      -- Default number of BCLK rising edges per LRCK half-frame.
+      DEFAULT_LRCK_BITS  : positive := 32;
+      -- Use the external MCLK pin as a timing reference indicator instead of generating MCLK.
+      USE_EXTERNAL_MCLK  : boolean  := false;
+      -- Disable MCLK generation and leave MCLK output released.
+      NO_MCLK            : boolean  := false;
+      -- Use the external BCLK/LRCK pins for I2S timing instead of generating them.
+      USE_EXTERNAL_BCLK  : boolean  := false;
+      -- Emit I2S-to-AXIS receive datapath logic.
+      ENABLE_I2S_TO_AXIS : boolean  := true;
+      -- Emit AXIS-to-I2S transmit datapath logic.
+      ENABLE_AXIS_TO_I2S : boolean  := true;
+      -- Selects the vendor-specific implementation path. This core is portable RTL for all values.
+      VENDOR_TAG         : string   := "GENERIC";
+      -- Identifies the target FPGA family for generated project metadata.
+      PRODUCT_SERIES_TAG : string   := "GENERIC"
+    );
+    port (
+      -- FPGA/register clock domain.
+      clk           : in  std_logic;
+      -- Active-low reset for the FPGA/register clock domain.
+      rstn          : in  std_logic;
+
+      -- Register write address.
+      reg_wr_addr   : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- Register read address.
+      reg_rd_addr   : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- One-cycle register write request.
+      reg_wr_en     : in  std_logic;
+      -- One-cycle register read request.
+      reg_rd_en     : in  std_logic;
+      -- Register write data.
+      reg_data_in   : in  std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register read data.
+      reg_data_out  : out std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register write ready.
+      reg_wr_rdy    : out std_logic;
+      -- Register read ready.
+      reg_rd_rdy    : out std_logic;
+      -- Register write response valid.
+      reg_wr_valid  : out std_logic;
+      -- Register read response valid.
+      reg_rd_valid  : out std_logic;
+      -- Register address or runtime error.
+      reg_error     : out std_logic;
+
+      -- External MCLK input when USE_EXTERNAL_MCLK is true.
+      i2s_mclk_i    : in  std_logic;
+      -- Generated MCLK output when enabled.
+      i2s_mclk_o    : out std_logic;
+      -- MCLK output-enable. A value of 1 enables the generated MCLK output.
+      i2s_mclk_oe   : out std_logic;
+      -- External BCLK input when USE_EXTERNAL_BCLK is true.
+      i2s_bclk_i    : in  std_logic;
+      -- Generated BCLK output when USE_EXTERNAL_BCLK is false.
+      i2s_bclk_o    : out std_logic;
+      -- BCLK output-enable. A value of 1 enables the generated BCLK output.
+      i2s_bclk_oe   : out std_logic;
+      -- External LRCK input when USE_EXTERNAL_BCLK is true.
+      i2s_lrck_i    : in  std_logic;
+      -- Generated LRCK output when USE_EXTERNAL_BCLK is false.
+      i2s_lrck_o    : out std_logic;
+      -- LRCK output-enable. A value of 1 enables the generated LRCK output.
+      i2s_lrck_oe   : out std_logic;
+      -- I2S serial data input.
+      i2s_sdata_i   : in  std_logic;
+      -- I2S serial data output.
+      i2s_sdata_o   : out std_logic;
+      -- Serial data output-enable. A value of 1 enables the generated serial data output.
+      i2s_sdata_oe  : out std_logic;
+
+      -- AXI-Stream output generated from received I2S stereo frames.
+      m_axis_tdata  : out std_logic_vector(AXIS_DATA_WIDTH - 1 downto 0);
+      -- AXI-Stream output valid.
+      m_axis_tvalid : out std_logic;
+      -- AXI-Stream output ready.
+      m_axis_tready : in  std_logic;
+      -- AXI-Stream output frame marker.
+      m_axis_tlast  : out std_logic;
+
+      -- AXI-Stream input consumed for I2S transmit stereo frames.
+      s_axis_tdata  : in  std_logic_vector(AXIS_DATA_WIDTH - 1 downto 0);
+      -- AXI-Stream input valid.
+      s_axis_tvalid : in  std_logic;
+      -- AXI-Stream input ready.
+      s_axis_tready : out std_logic;
+      -- AXI-Stream input frame marker.
+      s_axis_tlast  : in  std_logic
+    );
+  end component;
+
+  -- Component declaration sourced from interfaces/hdl/radif/src/radif_reg_to_i2c_master.vhd.
+  component radif_reg_to_i2c_master is
+    generic (
+      -- Width of the RADIF register data bus.
+      DATA_WIDTH         : positive := 32;
+      -- Width of the RADIF register address bus.
+      REG_ADDR_WIDTH     : positive := 16;
+      -- Default SCL half-period divider. The active half-period is divider + 1 FPGA clock cycles.
+      DEFAULT_SCL_DIV    : natural  := 124;
+      -- Selects the vendor-specific implementation path. This core is portable RTL for all values.
+      VENDOR_TAG         : string   := "GENERIC";
+      -- Identifies the target FPGA family for generated project metadata.
+      PRODUCT_SERIES_TAG : string   := "GENERIC"
+    );
+    port (
+      -- FPGA/register clock domain.
+      clk          : in  std_logic;
+      -- Active-low reset for the FPGA/register clock domain.
+      rstn         : in  std_logic;
+
+      -- Register write address.
+      reg_wr_addr  : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- Register read address.
+      reg_rd_addr  : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- One-cycle register write request.
+      reg_wr_en    : in  std_logic;
+      -- One-cycle register read request.
+      reg_rd_en    : in  std_logic;
+      -- Register write data.
+      reg_data_in  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+      -- Register read data.
+      reg_data_out : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+      -- Register write ready.
+      reg_wr_rdy   : out std_logic;
+      -- Register read ready.
+      reg_rd_rdy   : out std_logic;
+      -- Register write response valid.
+      reg_wr_valid : out std_logic;
+      -- Register read response valid.
+      reg_rd_valid : out std_logic;
+      -- Register address or transaction error.
+      reg_error    : out std_logic;
+
+      -- Open-drain SCL input as observed at the pin.
+      i2c_scl_i    : in  std_logic;
+      -- Open-drain SDA input as observed at the pin.
+      i2c_sda_i    : in  std_logic;
+      -- SCL output-enable. A value of 0 drives SCL low; a value of 1 releases SCL.
+      i2c_scl_oen  : out std_logic;
+      -- SDA output-enable. A value of 0 drives SDA low; a value of 1 releases SDA.
+      i2c_sda_oen  : out std_logic
+    );
+  end component;
+
+  -- Component declaration sourced from interfaces/hdl/radif/src/radif_reg_to_spi_master.vhd.
+  component radif_reg_to_spi_master is
+    generic (
+      -- Width of the RADIF register data bus and the maximum SPI transfer word.
+      DATA_WIDTH         : positive := 32;
+      -- Width of the RADIF register address bus.
+      REG_ADDR_WIDTH     : positive := 16;
+      -- Default half-period divider for SCLK generation. The active half-period is divider + 1 FPGA clock cycles.
+      DEFAULT_SCLK_DIV   : natural  := 124;
+      -- Default number of bits shifted per transfer.
+      DEFAULT_BIT_COUNT  : positive := 8;
+      -- Selects the vendor-specific implementation path. This core is portable RTL for all values.
+      VENDOR_TAG         : string   := "GENERIC";
+      -- Identifies the target FPGA family for generated project metadata.
+      PRODUCT_SERIES_TAG : string   := "GENERIC"
+    );
+    port (
+      -- FPGA/register clock domain.
+      clk          : in  std_logic;
+      -- Active-low reset for the FPGA/register clock domain.
+      rstn         : in  std_logic;
+
+      -- Register write address.
+      reg_wr_addr  : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- Register read address.
+      reg_rd_addr  : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- One-cycle register write request.
+      reg_wr_en    : in  std_logic;
+      -- One-cycle register read request.
+      reg_rd_en    : in  std_logic;
+      -- Register write data.
+      reg_data_in  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+      -- Register read data.
+      reg_data_out : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+      -- Register write ready.
+      reg_wr_rdy   : out std_logic;
+      -- Register read ready.
+      reg_rd_rdy   : out std_logic;
+      -- Register write response valid.
+      reg_wr_valid : out std_logic;
+      -- Register read response valid.
+      reg_rd_valid : out std_logic;
+      -- Register address or transaction error.
+      reg_error    : out std_logic;
+
+      -- SPI serial clock.
+      spi_sclk_o   : out std_logic;
+      -- SPI chip select, active low by default.
+      spi_cs_n_o   : out std_logic;
+      -- SPI master-out/slave-in data.
+      spi_mosi_o   : out std_logic;
+      -- SPI master-in/slave-out data.
+      spi_miso_i   : in  std_logic
+    );
+  end component;
+
   -- Component declaration sourced from interfaces/hdl/radif/src/radif_spi_slave_to_reg.vhd.
   component radif_spi_slave_to_reg is
     generic (

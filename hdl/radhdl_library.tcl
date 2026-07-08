@@ -10,6 +10,7 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT hdl radhdl src dsp_transform.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_axi.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_i2s.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_i2c.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_regbank.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_smi.vhd] \
@@ -91,6 +92,9 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_bank.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_interconnect.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_axi_lite_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_i2s_axis.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_to_i2c_master.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_to_spi_master.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_spi_slave_to_reg.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_qspi_slave_to_reg.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_i2c_slave_to_reg.vhd] \

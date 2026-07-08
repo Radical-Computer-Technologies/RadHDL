@@ -1,0 +1,106 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use std.env.all;
+
+library radif;
+
+-- Exercises the register-controlled SPI master with a looped-back MISO/MOSI path.
+-- The waveform shows software register writes, chip-select assertion, generated SCLK pulses, MOSI shifting, and transaction completion status.
+entity tb_radif_reg_to_spi_master is
+end entity;
+
+architecture sim of tb_radif_reg_to_spi_master is
+  signal clk          : std_logic := '0';
+  signal rstn         : std_logic := '0';
+  signal reg_wr_addr  : std_logic_vector(15 downto 0) := (others => '0');
+  signal reg_rd_addr  : std_logic_vector(15 downto 0) := (others => '0');
+  signal reg_wr_en    : std_logic := '0';
+  signal reg_rd_en    : std_logic := '0';
+  signal reg_data_in  : std_logic_vector(31 downto 0) := (others => '0');
+  signal reg_data_out : std_logic_vector(31 downto 0);
+  signal reg_wr_rdy   : std_logic;
+  signal reg_rd_rdy   : std_logic;
+  signal reg_wr_valid : std_logic;
+  signal reg_rd_valid : std_logic;
+  signal reg_error    : std_logic;
+  signal spi_sclk     : std_logic;
+  signal spi_cs_n     : std_logic;
+  signal spi_mosi     : std_logic;
+  signal spi_miso     : std_logic;
+begin
+  clk <= not clk after 5 ns;
+  spi_miso <= spi_mosi;
+
+  dut : entity radif.radif_reg_to_spi_master
+    generic map (
+      DEFAULT_SCLK_DIV => 1,
+      DEFAULT_BIT_COUNT => 8
+    )
+    port map (
+      clk => clk,
+      rstn => rstn,
+      reg_wr_addr => reg_wr_addr,
+      reg_rd_addr => reg_rd_addr,
+      reg_wr_en => reg_wr_en,
+      reg_rd_en => reg_rd_en,
+      reg_data_in => reg_data_in,
+      reg_data_out => reg_data_out,
+      reg_wr_rdy => reg_wr_rdy,
+      reg_rd_rdy => reg_rd_rdy,
+      reg_wr_valid => reg_wr_valid,
+      reg_rd_valid => reg_rd_valid,
+      reg_error => reg_error,
+      spi_sclk_o => spi_sclk,
+      spi_cs_n_o => spi_cs_n,
+      spi_mosi_o => spi_mosi,
+      spi_miso_i => spi_miso
+    );
+
+  process
+    procedure reg_write(addr : std_logic_vector(15 downto 0); data : std_logic_vector(31 downto 0)) is
+    begin
+      wait until rising_edge(clk);
+      reg_wr_addr <= addr;
+      reg_data_in <= data;
+      reg_wr_en <= '1';
+      wait until rising_edge(clk);
+      reg_wr_en <= '0';
+    end procedure;
+
+    procedure reg_read(addr : std_logic_vector(15 downto 0)) is
+    begin
+      wait until rising_edge(clk);
+      reg_rd_addr <= addr;
+      reg_rd_en <= '1';
+      wait until rising_edge(clk);
+      reg_rd_en <= '0';
+      wait until rising_edge(clk);
+    end procedure;
+  begin
+    wait for 40 ns;
+    rstn <= '1';
+
+    reg_write(x"0008", x"00000001");
+    reg_write(x"000C", x"00000800");
+    reg_write(x"0010", x"A5000000");
+    reg_write(x"0000", x"00000001");
+
+    for i in 0 to 80 loop
+      wait until rising_edge(clk);
+      exit when spi_cs_n = '0';
+    end loop;
+    assert spi_cs_n = '0' report "SPI chip select did not assert" severity failure;
+
+    for i in 0 to 120 loop
+      wait until rising_edge(clk);
+      exit when spi_cs_n = '1';
+    end loop;
+
+    reg_read(x"0004");
+    assert reg_data_out(1) = '1' report "SPI transaction did not complete" severity failure;
+    assert reg_error = '0' report "SPI register error asserted" severity failure;
+    report "PASS tb_radif_reg_to_spi_master";
+    finish;
+  end process;
+end architecture;
