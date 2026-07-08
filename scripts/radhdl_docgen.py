@@ -74,6 +74,10 @@ class RegisterDoc:
     name: str
     offset: str
     access: str = ""
+    address: str = ""
+    reset: str = ""
+    width: int = 32
+    region: str = ""
     description: str = ""
     fields: list[dict[str, Any]] = field(default_factory=list)
 
@@ -83,6 +87,8 @@ class RegisterMapDoc:
     name: str
     path: str
     base: str = ""
+    description: str = ""
+    data_width: int = 32
     registers: list[RegisterDoc] = field(default_factory=list)
 
 
@@ -338,6 +344,17 @@ def hex_string(value: Any) -> str:
     return str(value)
 
 
+def int_value(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value), 0)
+    except ValueError:
+        return None
+
+
 def parse_bit_fields(description: str) -> list[dict[str, Any]]:
     fields: list[dict[str, Any]] = []
     for match in BIT_FIELD_RE.finditer(description or ""):
@@ -352,13 +369,79 @@ def parse_bit_fields(description: str) -> list[dict[str, Any]]:
     return fields
 
 
+def access_description(access: str) -> str:
+    normalized = access.lower()
+    if normalized in {"ro", "read-only", "read_only"}:
+        return "Read-only status or measurement"
+    if normalized in {"wo", "write-only", "write_only"}:
+        return "Write-only command"
+    if normalized in {"rw", "read-write", "read_write"}:
+        return "Read/write control or configuration"
+    return "Memory-mapped"
+
+
+def describe_register(register: dict[str, Any], region_name: str) -> str:
+    explicit = str(register.get("description", "") or "").strip()
+    if explicit:
+        return explicit
+    raw_name = str(register.get("name", "register")).split(".")[-1]
+    friendly = raw_name.replace("_", " ").strip()
+    lower = raw_name.lower()
+    if "scratch" in lower:
+        return "Software scratch register reserved for driver diagnostics and register-path validation."
+    if lower == "magic":
+        return "Read-only identification value used by software to confirm that the expected register block is present."
+    if lower == "version":
+        return "Read-only hardware/register-map version value used for software compatibility checks."
+    if "status" in lower:
+        return "Read-only status register exposing current hardware state and latched conditions."
+    if "clear" in lower:
+        return "Write-one-to-clear command register for latched status or interrupt bits."
+    if "counter" in lower or "count" in lower:
+        return f"{access_description(str(register.get('access', '')))} counter register for the {region_name} region."
+    if any(token in lower for token in ("base", "end", "addr", "address")):
+        return f"{access_description(str(register.get('access', '')))} address register for the {region_name} region."
+    if "length" in lower or "bytes" in lower:
+        return f"{access_description(str(register.get('access', '')))} transfer length register for the {region_name} region."
+    return f"{access_description(str(register.get('access', '')))} register for {friendly} in the {region_name} region."
+
+
+def register_from_json(register: dict[str, Any], region_name: str, region_base: Any, default_width: int) -> RegisterDoc:
+    description = describe_register(register, region_name)
+    width_value = register.get("width", default_width)
+    try:
+        width = int(width_value)
+    except (TypeError, ValueError):
+        width = default_width
+    address = hex_string(register.get("address", ""))
+    if not address:
+        base_int = int_value(region_base)
+        offset_int = int_value(register.get("offset", ""))
+        if base_int is not None and offset_int is not None:
+            address = f"0x{base_int + offset_int:04X}"
+    return RegisterDoc(
+        name=str(register.get("name", "")),
+        offset=hex_string(register.get("offset", "")),
+        access=str(register.get("access", "")),
+        address=address,
+        reset=hex_string(register.get("reset", "")),
+        width=width,
+        region=region_name,
+        description=description,
+        fields=parse_bit_fields(description),
+    )
+
+
 def load_register_maps(root: Path) -> list[RegisterMapDoc]:
     maps: list[RegisterMapDoc] = []
+    map_stems = {path.name.removesuffix(".map.json") for path in root.rglob("*.map.json") if not should_skip(path, root)}
     for path in sorted(root.rglob("*.json")):
         if should_skip(path, root):
             continue
         name = path.name
         if not any(name.endswith(suffix) for suffix in REGISTER_SUFFIXES):
+            continue
+        if name.endswith(".radlib.json") and path.name.removesuffix(".radlib.json") in map_stems and "generated" in path.relative_to(root).parts:
             continue
         try:
             data = json.loads(read_text(path))
@@ -367,28 +450,28 @@ def load_register_maps(root: Path) -> list[RegisterMapDoc]:
         regions = data.get("regions") if isinstance(data, dict) else None
         if not isinstance(regions, list):
             continue
+        default_width = int(data.get("data_width", 32) or 32)
+        flat_registers: dict[str, list[dict[str, Any]]] = {}
+        for register in data.get("registers", []) or []:
+            if isinstance(register, dict):
+                flat_registers.setdefault(str(register.get("region", "")), []).append(register)
         for region in regions:
             if not isinstance(region, dict):
                 continue
+            region_name = str(region.get("name") or data.get("name") or path.stem)
             registers: list[RegisterDoc] = []
-            for register in region.get("registers", []) or []:
+            region_registers = region.get("registers", []) or flat_registers.get(region_name, [])
+            for register in region_registers:
                 if not isinstance(register, dict):
                     continue
-                description = str(register.get("description", ""))
-                registers.append(
-                    RegisterDoc(
-                        name=str(register.get("name", "")),
-                        offset=hex_string(register.get("offset", "")),
-                        access=str(register.get("access", "")),
-                        description=description,
-                        fields=parse_bit_fields(description),
-                    )
-                )
+                registers.append(register_from_json(register, region_name, region.get("base", ""), default_width))
             maps.append(
                 RegisterMapDoc(
-                    name=str(region.get("name") or data.get("name") or path.stem),
+                    name=region_name,
                     path=rel_path(path, root),
                     base=hex_string(region.get("base", "")),
+                    description=str(region.get("description") or data.get("description") or ""),
+                    data_width=default_width,
                     registers=registers,
                 )
             )
@@ -436,38 +519,48 @@ def module_slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
 
 
-def write_css(out: Path) -> None:
-    css = """
-:root { color-scheme: light; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --accent: #106b62; --code: #102033; }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: white; line-height: 1.55; }
-a { color: #075e82; text-decoration: none; }
-a:hover { text-decoration: underline; }
-header { border-bottom: 1px solid var(--line); background: #f5f8fa; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 24px; }
-.kicker { color: var(--accent); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }
-h1 { margin: 4px 0 10px; font-size: 34px; line-height: 1.15; }
-h2 { margin-top: 34px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-h3 { margin-top: 24px; }
-.summary { color: var(--muted); max-width: 900px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
-.card { border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: white; }
-.card strong { display: block; margin-bottom: 4px; }
-.meta { color: var(--muted); font-size: 13px; }
-table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }
-th, td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }
-th { background: var(--panel); font-weight: 700; }
-code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-pre { overflow: auto; padding: 14px; border-radius: 6px; background: var(--code); color: #f4f7fb; }
-.diagram { overflow-x: auto; padding: 12px 0; }
-.bits { display: grid; grid-template-columns: repeat(32, minmax(22px, 1fr)); border: 1px solid var(--line); margin: 8px 0 12px; }
-.bit { min-height: 34px; border-right: 1px solid var(--line); padding: 3px; font-size: 11px; background: #fbfcfe; }
-.bit:last-child { border-right: 0; }
-.bit b { display: block; color: var(--muted); font-weight: 600; }
-.status { border-left: 4px solid #b7791f; background: #fff8e6; padding: 10px 12px; margin: 10px 0; }
-.wave { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: #fbfcfe; }
-nav.breadcrumb { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
-footer { margin-top: 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+def write_css(out: Path, theme: str = "dark") -> None:
+    if theme == "light":
+        theme_vars = ":root { color-scheme: light; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; }"
+    elif theme == "auto":
+        theme_vars = """:root { color-scheme: light dark; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; } }"""
+    else:
+        theme_vars = ":root { color-scheme: dark; --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; }"
+    css = f"""
+{theme_vars}
+* {{ box-sizing: border-box; }}
+body {{ margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }}
+a {{ color: var(--link); text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
+header {{ border-bottom: 1px solid var(--line); background: var(--panel); }}
+.wrap {{ max-width: 1180px; margin: 0 auto; padding: 24px; }}
+.kicker {{ color: var(--accent); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }}
+h1 {{ margin: 4px 0 10px; font-size: 34px; line-height: 1.15; }}
+h2 {{ margin-top: 34px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }}
+h3 {{ margin-top: 24px; }}
+.summary {{ color: var(--muted); max-width: 900px; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }}
+.card {{ border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: var(--card); }}
+.card strong {{ display: block; margin-bottom: 4px; }}
+.meta {{ color: var(--muted); font-size: 13px; }}
+table {{ width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }}
+th, td {{ border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }}
+th {{ background: var(--panel); font-weight: 700; }}
+code, pre {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code); color: #f4f7fb; }}
+.diagram {{ overflow-x: auto; padding: 12px 0; }}
+.reg-card {{ border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 12px 0; background: var(--card); }}
+.reg-card h4 {{ margin: 0 0 6px; }}
+.reg-meta {{ color: var(--muted); font-size: 13px; margin-bottom: 8px; }}
+.reg-ruler, .reg-bits {{ display: grid; grid-template-columns: repeat(32, minmax(18px, 1fr)); }}
+.reg-ruler span {{ font-size: 10px; color: var(--muted); text-align: center; border: 1px solid var(--line); border-bottom: 0; padding: 2px 0; background: var(--ruler); }}
+.reg-field {{ min-height: 38px; border: 1px solid var(--line); padding: 4px 6px; font-size: 12px; background: var(--soft); overflow-wrap: anywhere; }}
+.reg-field.reserved {{ color: var(--muted); background: var(--reserved); }}
+.status {{ border-left: 4px solid #d59b35; background: var(--panel); padding: 10px 12px; margin: 10px 0; }}
+.wave {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); }}
+nav.breadcrumb {{ font-size: 13px; color: var(--muted); margin-bottom: 14px; }}
+footer {{ margin-top: 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }}
 """.strip()
     assets = out / "assets"
     assets.mkdir(parents=True, exist_ok=True)
@@ -526,9 +619,16 @@ def field_table(title: str, fields: list[FieldDoc], include_direction: bool) -> 
 def render_block_svg(module: ModuleDoc) -> str:
     left = [port for port in module.ports if port.direction in {"in", "inout"}]
     right = [port for port in module.ports if port.direction in {"out", "buffer", "inout"}]
-    height = max(180, 80 + max(len(left), len(right), 1) * 28)
-    width = 860
-    rect_x, rect_y, rect_w, rect_h = 230, 50, 400, height - 90
+    max_ports = max(len(left), len(right), 1)
+    height = max(220, 190 + max_ports * 28)
+    left_chars = max([len(port.name) for port in left] + [0])
+    right_chars = max([len(port.name) for port in right] + [0])
+    title_chars = max(len(module.name), len(module.library) + len(module.kind) + 1)
+    text_width = (left_chars + right_chars) * 7 + 120
+    title_width = title_chars * 9 + 120
+    rect_w = max(420, text_width, title_width)
+    rect_x, rect_y, rect_h = 72, 50, height - 90
+    width = rect_x + rect_w + 90
     lines = [
         f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img">',
         '<style>text{font-family:Inter,Arial,sans-serif;font-size:13px;fill:#111827}.pin{stroke:#106b62;stroke-width:2;fill:none}.box{fill:#f7f9fc;stroke:#26323f;stroke-width:2}.bubble{fill:#fff;stroke:#106b62;stroke-width:2}.clock{fill:none;stroke:#106b62;stroke-width:2}</style>',
@@ -583,17 +683,45 @@ def render_block_svg(module: ModuleDoc) -> str:
     return "\n".join(lines)
 
 
-def render_register_bits(register: RegisterDoc) -> str:
-    names = {bit: "" for bit in range(32)}
+def register_segments(register: RegisterDoc) -> list[dict[str, Any]]:
+    width = max(1, min(register.width or 32, 64))
+    fields = []
     for field_doc in register.fields:
-        for bit in range(int(field_doc["lsb"]), int(field_doc["msb"]) + 1):
-            if 0 <= bit < 32:
-                names[bit] = str(field_doc["name"])
-    cells = []
-    for bit in range(31, -1, -1):
-        label = names[bit]
-        cells.append(f'<div class="bit"><b>{bit}</b>{html.escape(label)}</div>')
-    return '<div class="bits">' + "".join(cells) + "</div>"
+        msb = min(width - 1, int(field_doc["msb"]))
+        lsb = max(0, int(field_doc["lsb"]))
+        if msb >= lsb:
+            fields.append({"name": str(field_doc["name"]), "msb": msb, "lsb": lsb, "reserved": False})
+    if not fields:
+        return [{"name": "value", "msb": width - 1, "lsb": 0, "reserved": False}]
+    fields.sort(key=lambda item: item["msb"], reverse=True)
+    segments: list[dict[str, Any]] = []
+    cursor = width - 1
+    for field_doc in fields:
+        if field_doc["msb"] < cursor:
+            segments.append({"name": "reserved", "msb": cursor, "lsb": field_doc["msb"] + 1, "reserved": True})
+        segments.append(field_doc)
+        cursor = field_doc["lsb"] - 1
+    if cursor >= 0:
+        segments.append({"name": "reserved", "msb": cursor, "lsb": 0, "reserved": True})
+    return segments
+
+
+def render_register_block(register: RegisterDoc) -> str:
+    width = max(1, min(register.width or 32, 64))
+    ruler = "".join(f"<span>{bit}</span>" for bit in range(width - 1, -1, -1))
+    fields = []
+    for segment in register_segments(register):
+        msb = int(segment["msb"])
+        lsb = int(segment["lsb"])
+        span = msb - lsb + 1
+        start = width - msb
+        label = segment["name"] if msb == lsb else f"{segment['name']} [{msb}:{lsb}]"
+        css = "reg-field reserved" if segment.get("reserved") else "reg-field"
+        fields.append(f'<div class="{css}" style="grid-column: {start} / span {span};">{html.escape(label)}</div>')
+    return (
+        f'<div class="reg-ruler" style="grid-template-columns: repeat({width}, minmax(18px, 1fr));">{ruler}</div>'
+        f'<div class="reg-bits" style="grid-template-columns: repeat({width}, minmax(18px, 1fr));">{"".join(fields)}</div>'
+    )
 
 
 def render_register_maps(module: ModuleDoc) -> str:
@@ -603,25 +731,46 @@ def render_register_maps(module: ModuleDoc) -> str:
     for regmap in module.register_maps:
         parts.append(f"<h3>{html.escape(regmap.name)}</h3>")
         parts.append(f'<p class="meta">Source: {html.escape(regmap.path)} Base: {html.escape(regmap.base)}</p>')
+        parts.append(paragraph(regmap.description))
         if not regmap.registers:
             parts.append('<p class="summary">No registers declared in this map.</p>')
             continue
         rows = []
         for register in regmap.registers:
-            bit_view = render_register_bits(register) if register.fields else ""
             rows.append(
                 "<tr>"
                 f"<td>{html.escape(register.name)}</td>"
+                f"<td>{html.escape(register.address)}</td>"
                 f"<td>{html.escape(register.offset)}</td>"
                 f"<td>{html.escape(register.access)}</td>"
-                f"<td>{html.escape(register.description)}{bit_view}</td>"
+                f"<td>{html.escape(register.reset)}</td>"
+                f"<td>{html.escape(register.description)}</td>"
                 "</tr>"
             )
         parts.append(
-            "<table><thead><tr><th>Register</th><th>Offset</th><th>Access</th><th>Description and Bits</th></tr></thead><tbody>"
+            "<table><thead><tr><th>Register</th><th>Address</th><th>Offset</th><th>Access</th><th>Reset</th><th>Description</th></tr></thead><tbody>"
             + "".join(rows)
             + "</tbody></table>"
         )
+        for register in regmap.registers:
+            meta_items = [
+                item
+                for item in [
+                    f"Address {register.address}" if register.address else "",
+                    f"Offset {register.offset}" if register.offset else "",
+                    f"Access {register.access}" if register.access else "",
+                    f"Reset {register.reset}" if register.reset else "",
+                ]
+                if item
+            ]
+            parts.append(
+                '<div class="reg-card">'
+                f"<h4>{html.escape(register.name)}</h4>"
+                f'<div class="reg-meta">{html.escape(" / ".join(meta_items))}</div>'
+                + paragraph(register.description)
+                + render_register_block(register)
+                + "</div>"
+            )
     return "".join(parts)
 
 
@@ -1004,7 +1153,7 @@ def build_docs(args: argparse.Namespace) -> int:
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    write_css(out)
+    write_css(out, args.theme)
     modules, benches, maps = catalog(root)
     sim_cache: dict[str, dict[str, Any]] = {}
     for module in modules:
@@ -1038,7 +1187,7 @@ def build_one_module(args: argparse.Namespace) -> int:
     if module is None:
         raise ValueError(f"module not found: {args.name}")
     out.mkdir(parents=True, exist_ok=True)
-    write_css(out)
+    write_css(out, args.theme)
     render_module(module, root, out, args.run_sims, args.strict, args.stop_time, {})
     print(out / "modules" / module_slug(module.name) / "index.html")
     return 0
@@ -1071,6 +1220,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_parser_.add_argument("--run-sims", action="store_true", help="Run associated testbenches with GHDL when available.")
     build_parser_.add_argument("--strict", action="store_true", help="Fail on simulation/tool errors instead of recording skips.")
     build_parser_.add_argument("--stop-time", default="100us", help="GHDL --stop-time used for generated waveform runs.")
+    build_parser_.add_argument("--theme", choices=("dark", "light", "auto"), default="dark", help="Static HTML color theme.")
 
     module_parser = sub.add_parser("module", help="Generate one module datasheet.")
     module_parser.add_argument("name")
@@ -1079,6 +1229,7 @@ def build_parser() -> argparse.ArgumentParser:
     module_parser.add_argument("--run-sims", action="store_true")
     module_parser.add_argument("--strict", action="store_true")
     module_parser.add_argument("--stop-time", default="100us")
+    module_parser.add_argument("--theme", choices=("dark", "light", "auto"), default="dark")
 
     sim_parser = sub.add_parser("sim", help="Run one testbench and capture waveform status.")
     sim_parser.add_argument("testbench")
