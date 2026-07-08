@@ -7,6 +7,8 @@ library raddsp;
 
 use work.iqcal_capture_pkg.all;
 
+-- Self-checking or stimulus-focused testbench for zc chirp frame detector iqcal.
+-- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
 entity tb_zc_chirp_frame_detector_iqcal is
 end entity;
 

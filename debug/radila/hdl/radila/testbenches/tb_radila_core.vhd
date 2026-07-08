@@ -3,6 +3,8 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use std.env.finish;
 
+-- Self-checking or stimulus-focused testbench for radila core.
+-- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
 entity tb_radila_core is
 end entity;
 

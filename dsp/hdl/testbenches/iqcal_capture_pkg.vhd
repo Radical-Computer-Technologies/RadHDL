@@ -2,6 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+-- Testbench support package for IQ calibration capture data.
+-- Provides sample vectors and helpers used by Zadoff-Chu and IQ-processing simulations.
 package iqcal_capture_pkg is
   constant IQCAL_FRAME_LEN : integer := 1024;
   constant IQCAL_CHIRP_LEN : integer := 512;

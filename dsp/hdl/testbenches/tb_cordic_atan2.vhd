@@ -6,6 +6,8 @@ use std.env.all;
 
 library raddsp;
 
+-- Self-checking or stimulus-focused testbench for cordic atan2.
+-- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
 entity tb_cordic_atan2 is
 end entity;
 
