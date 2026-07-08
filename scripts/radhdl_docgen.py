@@ -107,6 +107,14 @@ class ModuleDoc:
     register_maps: list[RegisterMapDoc] = field(default_factory=list)
 
 
+@dataclass
+class DiagramPort:
+    name: str
+    direction: str
+    kind: str = "signal"
+    members: list[FieldDoc] = field(default_factory=list)
+
+
 def rel_path(path: Path, root: Path) -> str:
     return str(path.resolve().relative_to(root.resolve()))
 
@@ -503,6 +511,10 @@ def catalog(root: Path) -> tuple[list[ModuleDoc], list[TestbenchDoc], list[Regis
     return modules, benches, maps
 
 
+def datasheet_modules(modules: list[ModuleDoc]) -> list[ModuleDoc]:
+    return [module for module in modules if module.kind == "entity" and module.category != "Projects"]
+
+
 def json_catalog(root: Path) -> dict[str, Any]:
     modules, benches, maps = catalog(root)
     return {
@@ -517,6 +529,22 @@ def json_catalog(root: Path) -> dict[str, Any]:
 
 def module_slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+
+
+def package_group(module: ModuleDoc) -> str:
+    parts = module.path.split("/")
+    if "iprepo" in parts:
+        index = parts.index("iprepo")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    for marker in ("raddsp", "radif", "radila"):
+        if marker in parts:
+            return marker
+    return module.library
+
+
+def module_doc_slug(module: ModuleDoc) -> str:
+    return module_slug(f"{package_group(module)}__{module.name}")
 
 
 def write_css(out: Path, theme: str = "dark") -> None:
@@ -544,6 +572,15 @@ h3 {{ margin-top: 24px; }}
 .card {{ border: 1px solid var(--line); border-radius: 6px; padding: 14px; background: var(--card); }}
 .card strong {{ display: block; margin-bottom: 4px; }}
 .meta {{ color: var(--muted); font-size: 13px; }}
+.datasheet-browser {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); padding: 14px; }}
+.datasheet-search {{ width: 100%; max-width: 460px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); padding: 9px 11px; margin-bottom: 12px; }}
+.datasheet-section, .package-group {{ border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; background: var(--soft); }}
+.datasheet-section > summary, .package-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
+.package-group {{ margin: 8px 10px; background: var(--card); }}
+.datasheet-list {{ max-height: 260px; overflow-y: auto; padding: 4px 10px 10px; }}
+.datasheet-link-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 14px; }}
+.datasheet-link-row:first-child {{ border-top: 0; }}
+.datasheet-link-row .meta {{ white-space: nowrap; }}
 table {{ width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }}
 th, td {{ border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }}
 th {{ background: var(--panel); font-weight: 700; }}
@@ -616,9 +653,56 @@ def field_table(title: str, fields: list[FieldDoc], include_direction: bool) -> 
     )
 
 
+def interface_key(port: FieldDoc) -> str:
+    name = port.name
+    upper = name.upper()
+    match = re.match(r"^([SM]_AXI(?:S|4|_LITE|_LITE)?)(?:_|$)", upper)
+    if match:
+        return match.group(1)
+    match = re.match(r"^([SM]_AXIS)(?:_|$)", upper)
+    if match:
+        return match.group(1)
+    match = re.match(r"^([SM]_AXI)(?:_|$)", upper)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def interface_side(name: str, members: list[FieldDoc]) -> str:
+    upper = name.upper()
+    if upper.startswith("M_"):
+        return "out"
+    if upper.startswith("S_"):
+        return "in"
+    directions = {member.direction for member in members}
+    if directions <= {"out", "buffer"}:
+        return "out"
+    return "in"
+
+
+def diagram_ports(ports: list[FieldDoc]) -> list[DiagramPort]:
+    groups: dict[str, list[FieldDoc]] = {}
+    passthrough: list[DiagramPort] = []
+    for port in ports:
+        key = interface_key(port)
+        if key:
+            groups.setdefault(key, []).append(port)
+        else:
+            passthrough.append(DiagramPort(name=port.name, direction=port.direction, members=[port]))
+    grouped: list[DiagramPort] = []
+    for key, members in groups.items():
+        if len(members) < 3:
+            passthrough.extend(DiagramPort(name=member.name, direction=member.direction, members=[member]) for member in members)
+            continue
+        grouped.append(DiagramPort(name=key, direction=interface_side(key, members), kind="interface", members=members))
+    order = {port.name: index for index, port in enumerate(ports)}
+    return sorted(grouped + passthrough, key=lambda item: min(order.get(member.name, 10**6) for member in item.members))
+
+
 def render_block_svg(module: ModuleDoc) -> str:
-    left = [port for port in module.ports if port.direction in {"in", "inout"}]
-    right = [port for port in module.ports if port.direction in {"out", "buffer", "inout"}]
+    rendered_ports = diagram_ports(module.ports)
+    left = [port for port in rendered_ports if port.direction in {"in", "inout"}]
+    right = [port for port in rendered_ports if port.direction in {"out", "buffer", "inout"}]
     max_ports = max(len(left), len(right), 1)
     height = max(220, 190 + max_ports * 28)
     left_chars = max([len(port.name) for port in left] + [0])
@@ -631,16 +715,16 @@ def render_block_svg(module: ModuleDoc) -> str:
     width = rect_x + rect_w + 90
     lines = [
         f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img">',
-        '<style>text{font-family:Inter,Arial,sans-serif;font-size:13px;fill:#111827}.pin{stroke:#106b62;stroke-width:2;fill:none}.box{fill:#f7f9fc;stroke:#26323f;stroke-width:2}.bubble{fill:#fff;stroke:#106b62;stroke-width:2}.clock{fill:none;stroke:#106b62;stroke-width:2}</style>',
+        '<style>text{font-family:Inter,Arial,sans-serif;font-size:13px;fill:#111827}.pin{stroke:#106b62;stroke-width:2;fill:none}.interface-pin{stroke:#7b8794;stroke-width:2;fill:#e5e7eb}.box{fill:#f7f9fc;stroke:#26323f;stroke-width:2}.bubble{fill:#fff;stroke:#106b62;stroke-width:2}.clock{fill:none;stroke:#106b62;stroke-width:2}</style>',
         f'<rect class="box" x="{rect_x}" y="{rect_y}" width="{rect_w}" height="{rect_h}" rx="4"/>',
         f'<text x="{rect_x + rect_w / 2}" y="{rect_y + 34}" text-anchor="middle" font-weight="700">{html.escape(module.name)}</text>',
         f'<text x="{rect_x + rect_w / 2}" y="{rect_y + 56}" text-anchor="middle">{html.escape(module.library)} {html.escape(module.kind)}</text>',
     ]
-    def is_clock(port: FieldDoc) -> bool:
+    def is_clock(port: DiagramPort) -> bool:
         name = port.name.lower()
         return name in {"clk", "clock", "aclk"} or name.endswith("_clk") or name.endswith("clk")
 
-    def is_active_low(port: FieldDoc) -> bool:
+    def is_active_low(port: DiagramPort) -> bool:
         name = port.name.lower()
         return (
             name.endswith("_n")
@@ -661,7 +745,9 @@ def render_block_svg(module: ModuleDoc) -> str:
                 f'<text x="{text_x}" y="{y + 4}">{html.escape(port.name)}</text>',
             ]
         )
-        if is_clock(port):
+        if port.kind == "interface":
+            lines.append(f'<rect class="interface-pin" x="{rect_x - 44}" y="{y - 9}" width="18" height="18" rx="2"/>')
+        elif is_clock(port):
             lines.append(f'<path class="clock" d="M {rect_x + 2} {y - 7} L {rect_x + 15} {y} L {rect_x + 2} {y + 7}"/>')
         elif is_active_low(port):
             lines.append(f'<circle class="bubble" cx="{marker_x}" cy="{y}" r="5"/>')
@@ -675,7 +761,9 @@ def render_block_svg(module: ModuleDoc) -> str:
                 f'<text x="{text_x}" y="{y + 4}" text-anchor="end">{html.escape(port.name)}</text>',
             ]
         )
-        if is_clock(port):
+        if port.kind == "interface":
+            lines.append(f'<rect class="interface-pin" x="{rect_x + rect_w + 26}" y="{y - 9}" width="18" height="18" rx="2"/>')
+        elif is_clock(port):
             lines.append(f'<path class="clock" d="M {rect_x + rect_w - 2} {y - 7} L {rect_x + rect_w - 15} {y} L {rect_x + rect_w - 2} {y + 7}"/>')
         elif is_active_low(port):
             lines.append(f'<circle class="bubble" cx="{marker_x}" cy="{y}" r="5"/>')
@@ -895,6 +983,25 @@ def run_ghdl_command(command: list[str], work: Path) -> subprocess.CompletedProc
     return subprocess.run(command, cwd=work, check=True, capture_output=True, text=True)
 
 
+def sanitize_public_paths(value: Any, root: Path, out: Path) -> Any:
+    if isinstance(value, dict):
+        return {key: sanitize_public_paths(item, root, out) for key, item in value.items()}
+    if isinstance(value, list):
+        return [sanitize_public_paths(item, root, out) for item in value]
+    if isinstance(value, str):
+        replacements = {
+            str(root.resolve()) + os.sep: "",
+            str(out.resolve()) + os.sep: "",
+            str(root.resolve()): root.name,
+            str(out.resolve()): "",
+        }
+        sanitized = value
+        for needle, replacement in replacements.items():
+            sanitized = sanitized.replace(needle, replacement)
+        return sanitized
+    return value
+
+
 def analyze_sources(
     ghdl: str,
     root: Path,
@@ -964,7 +1071,7 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
             status.update(
                 {
                     "status": "passed",
-                    "vcd": str(vcd),
+                    "vcd": str(vcd.relative_to(out)),
                     "stdout": completed.stdout[-4000:] if completed.stdout else "",
                     "stderr": completed.stderr[-4000:] if completed.stderr else "",
                 }
@@ -980,6 +1087,7 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
             )
             if strict:
                 raise RuntimeError(f"GHDL simulation failed for {testbench.name}: {exc.stderr}") from exc
+    status = sanitize_public_paths(status, root, out)
     (sim_dir / "simulation_status.json").write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
     return status
 
@@ -1027,7 +1135,7 @@ def render_testbenches(
             message = reason[0] if reason else "GHDL simulation failed; see status JSON for details."
             parts.append(f'<div class="status">{html.escape(bench.name)} simulation failed: {html.escape(message)}</div>')
         if status.get("vcd"):
-            parts.append(render_vcd_preview(Path(status["vcd"])))
+            parts.append(render_vcd_preview(out / status["vcd"]))
     parts.insert(
         1,
         "<table><thead><tr><th>Testbench</th><th>Source</th><th>Simulation</th><th>Artifacts</th></tr></thead><tbody>"
@@ -1046,7 +1154,7 @@ def render_module(
     stop_time: str,
     sim_cache: dict[str, dict[str, Any]],
 ) -> None:
-    module_dir = out / "modules" / module_slug(module.name)
+    module_dir = out / "modules" / module_doc_slug(module)
     module_dir.mkdir(parents=True, exist_ok=True)
     body = f"""
 <header><div class="wrap">
@@ -1087,7 +1195,7 @@ def render_library_pages(modules: list[ModuleDoc], out: Path) -> None:
             for module in [item for item in library_modules if item.category == category]:
                 desc = module.description.splitlines()[0] if module.description else "Datasheet generated from VHDL source."
                 cards.append(
-                    f'<div class="card"><strong><a href="../modules/{module_slug(module.name)}/index.html">{html.escape(module.name)}</a></strong>'
+                    f'<div class="card"><strong><a href="../modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a></strong>'
                     f'<div class="meta">{html.escape(module.kind)} / {len(module.ports)} ports / {len(module.generics)} generics</div>'
                     f'<p>{html.escape(desc)}</p></div>'
                 )
@@ -1105,40 +1213,96 @@ def render_library_pages(modules: list[ModuleDoc], out: Path) -> None:
         (lib_dir / f"{library}.html").write_text(page(f"{library} Library", body, depth=1), encoding="utf-8")
 
 
-def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], out: Path, root: Path) -> None:
-    libraries = sorted({module.library for module in modules})
-    categories = sorted({module.category for module in modules})
-    library_cards = "".join(
-        f'<div class="card"><strong><a href="libraries/{html.escape(library)}.html">{html.escape(library)}</a></strong>'
-        f'<div class="meta">{sum(1 for module in modules if module.library == library)} datasheets</div></div>'
-        for library in libraries
-    )
-    category_sections = []
+def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
+    preferred_categories = ["DSP", "Debug", "Interfaces"]
+    discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
+    categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
+    sections: list[str] = []
     for category in categories:
-        cards = []
-        for module in sorted([item for item in modules if item.category == category], key=lambda item: item.name.lower()):
-            desc = module.description.splitlines()[0] if module.description else "Datasheet generated from VHDL source."
-            cards.append(
-                f'<div class="card"><strong><a href="modules/{module_slug(module.name)}/index.html">{html.escape(module.name)}</a></strong>'
-                f'<div class="meta">{html.escape(module.library)} / {html.escape(module.kind)}</div><p>{html.escape(desc)}</p></div>'
+        category_modules = [module for module in modules if module.category == category]
+        packages = sorted({package_group(module) for module in category_modules}, key=str.lower)
+        package_sections: list[str] = []
+        for package in packages:
+            package_modules = sorted(
+                [module for module in category_modules if package_group(module) == package],
+                key=lambda item: item.name.lower(),
             )
-        category_sections.append(f"<h2>{html.escape(category)}</h2><div class=\"grid\">{''.join(cards)}</div>")
+            rows = []
+            for module in package_modules:
+                search_text = " ".join(
+                    [
+                        module.name,
+                        module.library,
+                        module.category,
+                        package,
+                        module.description.splitlines()[0] if module.description else "",
+                    ]
+                ).lower()
+                rows.append(
+                    '<div class="datasheet-link-row" '
+                    f'data-datasheet-item data-search="{html.escape(search_text)}">'
+                    f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
+                    f'<span class="meta">{len(module.ports)} ports / {len(module.generics)} generics</span>'
+                    "</div>"
+                )
+            package_sections.append(
+                f'<details class="package-group" open data-package-group>'
+                f'<summary>{html.escape(package)} <span class="meta">{len(package_modules)} datasheets</span></summary>'
+                f'<div class="datasheet-list">{"".join(rows)}</div>'
+                "</details>"
+            )
+        sections.append(
+            f'<details class="datasheet-section" open data-datasheet-section>'
+            f'<summary>{html.escape(category)} <span class="meta">{len(category_modules)} datasheets</span></summary>'
+            f'{"".join(package_sections)}'
+            "</details>"
+        )
+    script = """
+<script>
+(() => {
+  const input = document.querySelector("[data-datasheet-search]");
+  if (!input) return;
+  const apply = () => {
+    const query = input.value.trim().toLowerCase();
+    document.querySelectorAll("[data-datasheet-item]").forEach((row) => {
+      row.hidden = query && !row.dataset.search.includes(query);
+    });
+    document.querySelectorAll("[data-package-group]").forEach((group) => {
+      group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
+    });
+    document.querySelectorAll("[data-datasheet-section]").forEach((section) => {
+      section.hidden = !section.querySelector("[data-package-group]:not([hidden])");
+    });
+  };
+  input.addEventListener("input", apply);
+})();
+</script>
+""".strip()
+    return (
+        '<section class="datasheet-browser">'
+        '<input class="datasheet-search" type="search" data-datasheet-search placeholder="Search datasheets">'
+        f'{"".join(sections)}'
+        f"{script}"
+        "</section>"
+    )
+
+
+def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], out: Path, root: Path) -> None:
     body = f"""
 <header><div class="wrap">
   <div class="kicker">RadHDL Documentation</div>
   <h1>RadHDL Datasheets</h1>
-  <p class="summary">Static HDL documentation generated from {html.escape(str(root))}. Module pages are datasheet-style references with ports, generics, source snippets, register maps, testbench links, and optional GHDL waveform previews.</p>
+  <p class="summary">Static HDL documentation for RadHDL modules. Datasheets include ports, generics, source snippets, register maps, testbench links, and optional GHDL waveform previews.</p>
 </div></header>
 <main class="wrap">
-  <h2>Libraries</h2>
-  <div class="grid">{library_cards}</div>
   <h2>Catalog Summary</h2>
   <table><tbody>
-    <tr><th>Modules and packages</th><td>{len(modules)}</td></tr>
+    <tr><th>Datasheets</th><td>{len(modules)}</td></tr>
     <tr><th>Testbenches</th><td>{len(benches)}</td></tr>
     <tr><th>Register maps</th><td>{len(maps)}</td></tr>
   </tbody></table>
-  {''.join(category_sections)}
+  <h2>Datasheets</h2>
+  {render_datasheet_browser(modules)}
 </main>
 <footer><div class="wrap">Generated by radhdl-docgen {VERSION}</div></footer>
 """
@@ -1154,7 +1318,8 @@ def build_docs(args: argparse.Namespace) -> int:
         shutil.rmtree(out)
     out.mkdir(parents=True)
     write_css(out, args.theme)
-    modules, benches, maps = catalog(root)
+    hdl_units, benches, maps = catalog(root)
+    modules = datasheet_modules(hdl_units)
     sim_cache: dict[str, dict[str, Any]] = {}
     for module in modules:
         render_module(module, root, out, args.run_sims, args.strict, args.stop_time, sim_cache)
@@ -1165,8 +1330,9 @@ def build_docs(args: argparse.Namespace) -> int:
             {
                 "schema": "radhdl-docgen-catalog",
                 "version": VERSION,
-                "radhdl": str(root),
+                "radhdl": root.name,
                 "modules": [asdict(module) for module in modules],
+                "hdl_units": [asdict(module) for module in hdl_units],
                 "testbenches": [asdict(bench) for bench in benches],
                 "register_maps": [asdict(regmap) for regmap in maps],
             },
@@ -1183,13 +1349,14 @@ def build_one_module(args: argparse.Namespace) -> int:
     root = args.radhdl.expanduser().resolve()
     out = args.out.expanduser().resolve()
     modules, _benches, _maps = catalog(root)
+    modules = datasheet_modules(modules)
     module = next((item for item in modules if item.name == args.name), None)
     if module is None:
         raise ValueError(f"module not found: {args.name}")
     out.mkdir(parents=True, exist_ok=True)
     write_css(out, args.theme)
     render_module(module, root, out, args.run_sims, args.strict, args.stop_time, {})
-    print(out / "modules" / module_slug(module.name) / "index.html")
+    print(out / "modules" / module_doc_slug(module) / "index.html")
     return 0
 
 
