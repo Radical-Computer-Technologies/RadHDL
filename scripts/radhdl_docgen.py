@@ -740,6 +740,15 @@ def interface_key(port: FieldDoc) -> str:
     return ""
 
 
+def interface_sort_rank(name: str) -> int:
+    upper = name.upper()
+    if "AXIS" in upper or "_AXIS_" in upper:
+        return 0
+    if "AXI" in upper or "_AXI_" in upper:
+        return 1
+    return 2
+
+
 def interface_side(name: str, members: list[FieldDoc]) -> str:
     upper = name.upper()
     if upper.startswith("M_"):
@@ -750,6 +759,18 @@ def interface_side(name: str, members: list[FieldDoc]) -> str:
     if directions <= {"out", "buffer"}:
         return "out"
     return "in"
+
+
+def ordered_ports_for_docs(ports: list[FieldDoc]) -> list[FieldDoc]:
+    order = {port.name: index for index, port in enumerate(ports)}
+    return sorted(
+        ports,
+        key=lambda port: (
+            interface_sort_rank(interface_key(port) or port.name),
+            interface_key(port) or "",
+            order.get(port.name, 10**6),
+        ),
+    )
 
 
 def diagram_ports(ports: list[FieldDoc]) -> list[DiagramPort]:
@@ -768,7 +789,14 @@ def diagram_ports(ports: list[FieldDoc]) -> list[DiagramPort]:
             continue
         grouped.append(DiagramPort(name=key, direction=interface_side(key, members), kind="interface", members=members))
     order = {port.name: index for index, port in enumerate(ports)}
-    return sorted(grouped + passthrough, key=lambda item: min(order.get(member.name, 10**6) for member in item.members))
+    return sorted(
+        grouped + passthrough,
+        key=lambda item: (
+            interface_sort_rank(item.name),
+            item.name.upper() if item.kind == "interface" else "",
+            min(order.get(member.name, 10**6) for member in item.members),
+        ),
+    )
 
 
 def render_block_svg(module: ModuleDoc) -> str:
@@ -991,9 +1019,10 @@ def vhdl_component_template(module: ModuleDoc) -> str:
             )
         )
         lines.append("  );")
-    if module.ports:
+    ports = ordered_ports_for_docs(module.ports)
+    if ports:
         lines.append("  port (")
-        lines.extend(declaration_list(module.ports, lambda field: f"{field.name} : {field.direction} {field.data_type}"))
+        lines.extend(declaration_list(ports, lambda field: f"{field.name} : {field.direction} {field.data_type}"))
         lines.append("  );")
     else:
         lines.append("  -- No ports declared.")
@@ -1003,7 +1032,7 @@ def vhdl_component_template(module: ModuleDoc) -> str:
 
 def vhdl_instantiation_template(module: ModuleDoc) -> str:
     generic_map = association_template(module.generics, lambda field: field.default or f"<{field.name.lower()}_value>")
-    port_map = association_template(module.ports, lambda field: f"<{field.name.lower()}_signal>")
+    port_map = association_template(ordered_ports_for_docs(module.ports), lambda field: f"<{field.name.lower()}_signal>")
     lines = [f"u_{module.name.lower()} : entity {module.library}.{module.name}"]
     if generic_map:
         lines.append("  generic map (")
@@ -1311,7 +1340,7 @@ def render_module(
   <div class="diagram">{render_block_svg(module)}</div>
   {render_integration_template(module)}
   {field_table("Generics", module.generics, include_direction=False)}
-  {field_table("Ports", module.ports, include_direction=True)}
+  {field_table("Ports", ordered_ports_for_docs(module.ports), include_direction=True)}
   {render_register_maps(module)}
   {render_testbenches(module, root, out, run_sims, strict, stop_time, sim_cache)}
   <h2>Sources</h2>
