@@ -87,7 +87,7 @@ architecture sim of tb_raddsp_axis_radfft_ddr is
   constant C_ZC_B_RE : sample_array_t := (-13, -11, 9, 16, 9, -11, -13, -16, 13, -11, -9, 16, -9, -11, 13, -16);
   constant C_ZC_B_IM : sample_array_t := (-9, 11, -13, 0, -13, 11, -9, 0, 9, 11, 13, 0, 13, 11, 9, 0);
 
-  function word_addr(addr : std_logic_vector) return natural is
+  impure function word_addr(addr : std_logic_vector) return natural is
   begin
     return to_integer(shift_right(unsigned(addr), 3)) mod mem'length;
   end function;

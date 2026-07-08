@@ -658,26 +658,22 @@ architecture rtl of raddsp_axis_radfft_ddr is
   function set_addr_low(old_addr : unsigned; data : std_logic_vector(31 downto 0)) return unsigned is
     variable ret : unsigned(old_addr'range) := old_addr;
   begin
-    if ret'length >= 32 then
-      ret(31 downto 0) := unsigned(data);
-    else
-      ret := unsigned(data(ret'length - 1 downto 0));
-    end if;
+    for bit_index in 0 to ret'length - 1 loop
+      if bit_index <= 31 then
+        ret(bit_index) := data(bit_index);
+      end if;
+    end loop;
     return ret;
   end function;
 
   function set_addr_high(old_addr : unsigned; data : std_logic_vector(31 downto 0)) return unsigned is
     variable ret : unsigned(old_addr'range) := old_addr;
-    variable high_width : natural;
   begin
-    if ret'length > 32 then
-      high_width := ret'length - 32;
-      if high_width >= 32 then
-        ret(63 downto 32) := unsigned(data);
-      else
-        ret(ret'length - 1 downto 32) := unsigned(data(high_width - 1 downto 0));
+    for bit_index in 32 to ret'length - 1 loop
+      if bit_index - 32 <= 31 then
+        ret(bit_index) := data(bit_index - 32);
       end if;
-    end if;
+    end loop;
     return ret;
   end function;
 

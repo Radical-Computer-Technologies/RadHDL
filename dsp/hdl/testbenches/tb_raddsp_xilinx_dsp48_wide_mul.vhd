@@ -4,6 +4,8 @@ use ieee.numeric_std.all;
 use std.textio.all;
 use std.env.all;
 
+library raddsp;
+
 -- Self-checking or stimulus-focused testbench for xilinx dsp48 wide mul.
 -- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
 entity tb_raddsp_xilinx_dsp48_wide_mul is
@@ -24,7 +26,7 @@ architecture sim of tb_raddsp_xilinx_dsp48_wide_mul is
 begin
   clk <= not clk after 5 ns;
 
-  dut: entity work.raddsp_xilinx_dsp48_wide_mul
+  dut: entity raddsp.raddsp_xilinx_dsp48_wide_mul
     generic map (
       DEVICE_FAMILY => "7series",
       A_WIDTH => C_AW,

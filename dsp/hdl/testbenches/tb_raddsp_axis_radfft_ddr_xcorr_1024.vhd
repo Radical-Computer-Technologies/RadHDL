@@ -4,6 +4,8 @@ use ieee.numeric_std.all;
 use std.textio.all;
 use std.env.all;
 
+library raddsp;
+
 -- Self-checking or stimulus-focused testbench for axis radfft ddr xcorr 1024.
 -- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
 entity tb_raddsp_axis_radfft_ddr_xcorr_1024 is
@@ -90,7 +92,7 @@ architecture sim of tb_raddsp_axis_radfft_ddr_xcorr_1024 is
   signal tb_mem_addr   : natural range 0 to 8191 := 0;
   signal tb_mem_data   : std_logic_vector(C_AXI_DATA_WIDTH - 1 downto 0) := (others => '0');
 
-  function word_addr(addr : std_logic_vector) return natural is
+  impure function word_addr(addr : std_logic_vector) return natural is
   begin
     return to_integer(shift_right(unsigned(addr), 3)) mod mem'length;
   end function;
@@ -117,7 +119,7 @@ architecture sim of tb_raddsp_axis_radfft_ddr_xcorr_1024 is
 begin
   clk <= not clk after 5 ns;
 
-  u_dut : entity work.raddsp_axis_radfft_ddr
+  u_dut : entity raddsp.raddsp_axis_radfft_ddr
     generic map (
       G_AXI_ADDR_WIDTH => C_AXI_ADDR_WIDTH,
       G_AXI_DATA_WIDTH => C_AXI_DATA_WIDTH,

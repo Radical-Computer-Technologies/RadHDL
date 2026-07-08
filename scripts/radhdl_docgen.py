@@ -26,9 +26,11 @@ HDL_LIBRARY_DIRS = {
     "radila": ("debug/radila/hdl/radila",),
 }
 HDL_SIM_MODEL_DIRS = {
+    "xpm": ("sim/xpm",),
+    "raddsp": ("dsp/hdl/raddsp/sim",),
     "radif": ("interfaces/hdl/radif/sim",),
 }
-VENDOR_SIM_LIBRARIES = {"xpm", "unisim", "unimacro", "unisims_ver"}
+VENDOR_SIM_LIBRARIES = {"unisim", "unimacro", "unisims_ver"}
 GHDL_BASE_ARGS = ["--std=08", "--ieee=synopsys"]
 EXCLUDED_PARTS = {
     ".git",
@@ -53,6 +55,10 @@ DECL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_,\s]*)\s*:\s*(.+?)\s*;?\s*$", re.
 PORT_RE = re.compile(r"^(inout|in|out|buffer)\s+(.+)$", re.IGNORECASE | re.DOTALL)
 BIT_FIELD_RE = re.compile(
     r"\bbits?\s*(?:\[?\s*(\d+)\s*(?::|downto|-)\s*(\d+)\s*\]?|(\d+))\s*[:=-]?\s*([^,;.]+)",
+    re.IGNORECASE,
+)
+VHDL_REG_CONSTANT_RE = re.compile(
+    r"\bconstant\s+C_REG_([A-Za-z0-9_]+)\s*:\s*(?:natural|integer)\s*:=\s*16#([0-9A-Fa-f_]+)#\s*;",
     re.IGNORECASE,
 )
 
@@ -580,6 +586,71 @@ def load_register_maps(root: Path) -> list[RegisterMapDoc]:
     return maps
 
 
+def inferred_register_description(name: str) -> str:
+    lower = name.lower()
+    if lower in {"ctrl", "control", "command", "cmd"}:
+        return "Control register used to configure and control this block."
+    if "status" in lower:
+        return "Status register exposing current hardware state and latched conditions."
+    if any(token in lower for token in ("addr", "address", "ptr", "index")):
+        return "Address or index register used by the software-visible control interface."
+    if any(token in lower for token in ("hash", "seed", "mask", "value", "meta", "selected")):
+        return "Data or comparison value register used by the software-visible control interface."
+    if any(token in lower for token in ("count", "bins", "size", "stride", "gap", "delta", "shift")):
+        return "Configuration or measurement register used by the software-visible control interface."
+    return "Register inferred from the module's VHDL register constant declarations."
+
+
+def infer_vhdl_register_map(module: ModuleDoc, root: Path) -> RegisterMapDoc | None:
+    registers: list[RegisterDoc] = []
+    seen_offsets: set[str] = set()
+    for source in module.sources:
+        path = root / source
+        if not path.exists():
+            continue
+        for match in VHDL_REG_CONSTANT_RE.finditer(read_text(path)):
+            raw_name, raw_offset = match.groups()
+            offset = f"0x{int(raw_offset.replace('_', ''), 16):02X}"
+            if offset in seen_offsets:
+                continue
+            seen_offsets.add(offset)
+            name = raw_name.lower()
+            registers.append(
+                RegisterDoc(
+                    name=name,
+                    offset=offset,
+                    access="rw",
+                    width=32,
+                    description=inferred_register_description(name),
+                )
+            )
+    if not registers:
+        return None
+    registers.sort(key=lambda item: int(item.offset, 16))
+    return RegisterMapDoc(
+        name=f"{module.name}_inferred",
+        path=module.path,
+        description=(
+            "Register map inferred from C_REG_* constants in the VHDL source. "
+            "Use this as a software-visible register index until a hand-authored map adds per-bit access details."
+        ),
+        data_width=32,
+        registers=registers,
+    )
+
+
+def attach_inferred_register_maps(modules: list[ModuleDoc], root: Path) -> list[RegisterMapDoc]:
+    inferred: list[RegisterMapDoc] = []
+    for module in modules:
+        if module.register_maps:
+            continue
+        regmap = infer_vhdl_register_map(module, root)
+        if regmap:
+            module.register_maps.append(regmap)
+            inferred.append(regmap)
+    return inferred
+
+
 def attach_register_maps(modules: list[ModuleDoc], maps: list[RegisterMapDoc]) -> None:
     by_name = {module.name.lower(): module for module in modules}
     for regmap in maps:
@@ -604,6 +675,7 @@ def catalog(root: Path) -> tuple[list[ModuleDoc], list[TestbenchDoc], list[Regis
     maps = load_register_maps(root)
     associate_testbenches(modules, benches, root)
     attach_register_maps(modules, maps)
+    maps.extend(attach_inferred_register_maps(modules, root))
     return modules, benches, maps
 
 
@@ -689,6 +761,8 @@ def register_search_text(module: ModuleDoc) -> str:
 
 def render_module_quick_links(module: ModuleDoc) -> str:
     links: list[str] = []
+    if register_interface_groups(module):
+        links.append('<a class="pill" href="#register-interfaces">Register interfaces</a>')
     regs = register_count(module)
     if regs:
         map_names = ", ".join(regmap.name for regmap in module.register_maps)
@@ -775,6 +849,10 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave svg {{ display: block; width: calc(1120px * var(--wave-zoom)); max-width: none; height: auto; }}
 .wave-axis {{ stroke: var(--line); stroke-width: 1; }}
 .wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
+.wave-grid.clock-grid {{ opacity: .45; }}
+.wave-grid.fallback-grid {{ stroke-dasharray: 4 4; }}
+.wave-hover-line {{ stroke: #ffd84d; stroke-width: 2; opacity: 0; pointer-events: none; }}
+.wave-hover-label {{ fill: #ffd84d; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity: 0; pointer-events: none; }}
 .wave-label {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
 .wave-time {{ fill: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
 .wave-trace {{ fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }}
@@ -849,6 +927,68 @@ def field_table(title: str, fields: list[FieldDoc], include_direction: bool) -> 
         f"<h2>{html.escape(title)}</h2><table><thead><tr>"
         + "".join(f"<th>{html.escape(head)}</th>" for head in heads)
         + "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def is_register_interface_key(key: str) -> bool:
+    upper = key.upper()
+    return "AXI_LITE" in upper or upper.startswith("S_AXI") or upper.startswith("M_AXI")
+
+
+def is_register_port(port: FieldDoc) -> bool:
+    lower = port.name.lower()
+    if lower.startswith("s_axis") or lower.startswith("m_axis"):
+        return False
+    return (
+        lower.startswith("reg_")
+        or lower.startswith("s_axi_")
+        or lower.startswith("m_axi_")
+        or "axi_lite" in lower
+        or re.search(r"(^|_)rd(_|$)|(^|_)wr(_|$)", lower) is not None
+    )
+
+
+def register_interface_groups(module: ModuleDoc) -> dict[str, list[FieldDoc]]:
+    groups: dict[str, list[FieldDoc]] = {}
+    for port in module.ports:
+        key = interface_key(port)
+        if key and is_register_interface_key(key):
+            groups.setdefault(key, []).append(port)
+        elif is_register_port(port):
+            groups.setdefault("Register control/status", []).append(port)
+    return groups
+
+
+def render_register_interfaces(module: ModuleDoc) -> str:
+    groups = register_interface_groups(module)
+    if not groups:
+        return ""
+    rows = []
+    for name in sorted(groups, key=lambda item: (0 if "AXI" in item.upper() else 1, item.upper())):
+        ports = groups[name]
+        directions = ", ".join(sorted({port.direction for port in ports if port.direction}))
+        examples = ", ".join(port.name for port in ports[:8])
+        if len(ports) > 8:
+            examples += f", +{len(ports) - 8} more"
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(name)}</td>"
+            f"<td>{html.escape(directions)}</td>"
+            f"<td>{len(ports)}</td>"
+            f"<td>{html.escape(examples)}</td>"
+            "</tr>"
+        )
+    status = (
+        "Static register maps are rendered below for this module."
+        if module.register_maps
+        else "No fixed register map was found; this section documents the exposed register/control interface ports."
+    )
+    return (
+        '<h2 id="register-interfaces">Register Interfaces</h2>'
+        f"<p>{html.escape(status)}</p>"
+        "<table><thead><tr><th>Interface</th><th>Directions</th><th>Signals</th><th>Representative ports</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
@@ -1338,6 +1478,104 @@ def render_bus_wave(samples: list[tuple[int, str]], end_time: int, x0: int, widt
     return "".join(elements)
 
 
+def is_clock_wave_signal(signal: dict[str, Any]) -> bool:
+    name = str(signal.get("name", "")).lower()
+    return name in {"clk", "clock", "aclk"} or name.endswith("_clk") or name.endswith("clk")
+
+
+def clock_grid_times(signals: list[dict[str, Any]], end_time: int) -> list[int]:
+    clocks = [signal for signal in signals if is_clock_wave_signal(signal) and is_scalar_wave(signal.get("samples", []))]
+    if not clocks:
+        return []
+    samples = [(int(time), str(value).lower()) for time, value in clocks[0].get("samples", [])]
+    rising: list[int] = []
+    previous = ""
+    for time_value, value in samples:
+        if previous == "0" and value == "1":
+            rising.append(time_value)
+        previous = value
+    if len(rising) < 2:
+        return []
+    period = max(1, rising[1] - rising[0])
+    ticks = list(range(rising[0], end_time + period, period))
+    if len(ticks) > 240:
+        stride = max(1, len(ticks) // 240)
+        ticks = ticks[::stride]
+    return ticks
+
+
+def waveform_grid_times(signals: list[dict[str, Any]], end_time: int) -> tuple[list[int], bool]:
+    ticks = clock_grid_times(signals, end_time)
+    if ticks:
+        return ticks, True
+    fallback = sorted({int(end_time * fraction) for fraction in (0, 0.25, 0.5, 0.75, 1)})
+    return fallback or [0], False
+
+
+def waveform_script() -> str:
+    return """
+<script>
+(() => {
+  document.querySelectorAll(".wave").forEach((wave) => {
+    if (wave.dataset.ready === "1") return;
+    wave.dataset.ready = "1";
+    const zoom = wave.querySelector(".wave-zoom");
+    const svg = wave.querySelector("svg.waveform");
+    const hover = wave.querySelector(".wave-hover-line");
+    const hoverLabel = wave.querySelector(".wave-hover-label");
+    const labels = Array.from(wave.querySelectorAll(".wave-time"));
+    const grids = Array.from(wave.querySelectorAll(".wave-grid"));
+    const clockGrids = grids.filter((grid) => grid.dataset.clock === "1");
+    const snapGrids = clockGrids.length ? clockGrids : grids;
+    const setZoom = () => {
+      const value = zoom ? Number(zoom.value) / 100 : 1;
+      wave.style.setProperty("--wave-zoom", String(value));
+      const every = value >= 2.4 ? 1 : value >= 1.5 ? 2 : 4;
+      labels.forEach((label, index) => {
+        label.style.display = index % every === 0 ? "" : "none";
+      });
+    };
+    setZoom();
+    if (zoom) zoom.addEventListener("input", setZoom);
+    if (!svg || !hover || !hoverLabel || !snapGrids.length) return;
+    const nearest = (x) => {
+      let best = snapGrids[0];
+      let bestDistance = Math.abs(Number(best.dataset.x) - x);
+      snapGrids.forEach((line) => {
+        const distance = Math.abs(Number(line.dataset.x) - x);
+        if (distance < bestDistance) {
+          best = line;
+          bestDistance = distance;
+        }
+      });
+      return best;
+    };
+    svg.addEventListener("mousemove", (event) => {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const local = point.matrixTransform(matrix.inverse());
+      const line = nearest(local.x);
+      const x = Number(line.dataset.x);
+      hover.setAttribute("x1", x);
+      hover.setAttribute("x2", x);
+      hover.style.opacity = "1";
+      hoverLabel.setAttribute("x", x + 4);
+      hoverLabel.textContent = `t=${line.dataset.time}`;
+      hoverLabel.style.opacity = "1";
+    });
+    svg.addEventListener("mouseleave", () => {
+      hover.style.opacity = "0";
+      hoverLabel.style.opacity = "0";
+    });
+  });
+})();
+</script>
+""".strip()
+
+
 def wave_interface_key(name: str) -> str:
     upper = re.sub(r"\[[^\]]+\]$", "", name.upper())
     patterns = [
@@ -1370,7 +1608,13 @@ def group_wave_signals(signals: list[dict[str, Any]]) -> tuple[list[dict[str, An
     return overview, groups
 
 
-def render_waveform_svg(signals: list[dict[str, Any]], title: str, source: str = "", max_signals: int = 96) -> str:
+def render_waveform_svg(
+    signals: list[dict[str, Any]],
+    title: str,
+    source: str = "",
+    max_signals: int = 96,
+    grid_signals: list[dict[str, Any]] | None = None,
+) -> str:
     selected = [signal for signal in signals if signal.get("samples")][:max_signals]
     if not selected:
         return ""
@@ -1384,11 +1628,15 @@ def render_waveform_svg(signals: list[dict[str, Any]], title: str, source: str =
     trace_height = 16
     height = top + len(selected) * row_height + 28
     grid = []
-    for fraction in (0, 0.25, 0.5, 0.75, 1):
-        x = label_width + fraction * plot_width
-        time_label = int(end_time * fraction)
-        grid.append(f'<line class="wave-grid" x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />')
-        grid.append(f'<text class="wave-time" x="{x + 3:.1f}" y="15">{time_label}</text>')
+    ticks, clock_based = waveform_grid_times(grid_signals or selected, end_time)
+    grid_class = "wave-grid clock-grid" if clock_based else "wave-grid fallback-grid"
+    for tick_index, time_value in enumerate(ticks):
+        x = label_width + (time_value / end_time) * plot_width
+        grid.append(
+            f'<line class="{grid_class}" data-clock="{1 if clock_based else 0}" data-x="{x:.1f}" data-time="{time_value}" '
+            f'x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />'
+        )
+        grid.append(f'<text class="wave-time" data-tick="{tick_index}" x="{x + 3:.1f}" y="15">{time_value}</text>')
     rows = []
     for index, signal in enumerate(selected):
         row_y = top + index * row_height
@@ -1420,19 +1668,23 @@ def render_waveform_svg(signals: list[dict[str, Any]], title: str, source: str =
         f'<svg class="waveform" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
         + "".join(grid)
         + "".join(rows)
-        + "</svg></div></div>"
+        + f'<line class="wave-hover-line" x1="{label_width}" y1="20" x2="{label_width}" y2="{height - 18}" />'
+        + f'<text class="wave-hover-label" x="{label_width + 4}" y="{height - 6}"></text>'
+        + "</svg></div>"
+        + waveform_script()
+        + "</div>"
     )
 
 
 def render_waveform_viewer(signals: list[dict[str, Any]], title: str, source: str) -> str:
     overview, groups = group_wave_signals(signals)
-    parts = [render_waveform_svg(overview, title, source)]
+    parts = [render_waveform_svg(overview, title, source, grid_signals=signals)]
     for key in sorted(groups):
         parts.append(
             '<details class="wave-group">'
             f"<summary>{html.escape(key)} interface signals</summary>"
             '<div class="wave-group-body">'
-            + render_waveform_svg(groups[key], f"{key} Interface Waveform", source)
+            + render_waveform_svg(groups[key], f"{key} Interface Waveform", source, grid_signals=signals)
             + "</div></details>"
         )
     return "".join(parts)
@@ -1570,7 +1822,7 @@ def library_sources(root: Path, library: str) -> list[Path]:
     return sorted(sources, key=source_priority)
 
 
-def testbench_work_sources(testbench: Path, root: Path) -> list[Path]:
+def testbench_work_sources(testbench: Path, root: Path, libraries: list[str]) -> list[Path]:
     sources: list[Path] = []
     for path in sorted(testbench.parent.glob("*.vhd")):
         if path == testbench or should_skip(path, root):
@@ -1578,8 +1830,18 @@ def testbench_work_sources(testbench: Path, root: Path) -> list[Path]:
         text = read_text(path)
         if PACKAGE_RE.search(text):
             sources.append(path)
+    for library in libraries:
+        for rel in HDL_SIM_MODEL_DIRS.get(library, ()):
+            base = root / rel
+            if not base.exists():
+                continue
+            for path in sorted(base.rglob("*")):
+                if path.is_file() and path.suffix.lower() in HDL_SUFFIXES:
+                    sources.append(path)
+    if "debug/radila" in rel_path(testbench, root):
+        sources.extend(library_sources(root, "radila"))
     sources.append(testbench)
-    return sources
+    return list(dict.fromkeys(sources))
 
 
 def run_ghdl_command(command: list[str], work: Path) -> subprocess.CompletedProcess[str]:
@@ -1662,9 +1924,11 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
         work = Path(td)
         status = {"backend": "ghdl", "testbench": testbench.name, "status": "running", "libraries": libraries}
         try:
+            if (root / "sim/xpm").exists():
+                analyze_sources(ghdl, root, work, "xpm", library_sources(root, "xpm"), status)
             for library in libraries:
                 analyze_sources(ghdl, root, work, library, library_sources(root, library), status)
-            analyze_sources(ghdl, root, work, "work", testbench_work_sources(tb_path, root), status)
+            analyze_sources(ghdl, root, work, "work", testbench_work_sources(tb_path, root, libraries), status)
             run_ghdl_command([ghdl, "-e", *GHDL_BASE_ARGS, f"-P{work}", f"--workdir={work}", testbench.name], work)
             vcd = sim_dir / f"{testbench.name}.vcd"
             completed = run_ghdl_command(
@@ -1680,6 +1944,9 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
                 }
             )
         except subprocess.CalledProcessError as exc:
+            failed_vcd = sim_dir / f"{testbench.name}.vcd"
+            if failed_vcd.exists():
+                failed_vcd.unlink()
             status.update(
                 {
                     "status": "failed",
@@ -1780,6 +2047,7 @@ def render_module(
   {render_integration_template(module)}
   {field_table("Generics", module.generics, include_direction=False)}
   {field_table("Ports", ordered_ports_for_docs(module.ports), include_direction=True)}
+  {render_register_interfaces(module)}
   {render_register_maps(module)}
   {render_testbenches(module, root, out, run_sims, strict, stop_time, sim_cache)}
   <h2>Sources</h2>
