@@ -20,6 +20,13 @@ from typing import Any
 VERSION = "0.1.0"
 HDL_SUFFIXES = {".vhd", ".vhdl"}
 REGISTER_SUFFIXES = {".map.json", ".radlib.json"}
+HDL_LIBRARY_DIRS = {
+    "raddsp": ("dsp/hdl/raddsp/src",),
+    "radif": ("interfaces/hdl/radif/src",),
+    "radila": ("debug/radila/hdl/radila",),
+}
+VENDOR_SIM_LIBRARIES = {"xpm", "unisim", "unimacro", "unisims_ver"}
+GHDL_BASE_ARGS = ["--std=08", "--ieee=synopsys"]
 EXCLUDED_PARTS = {
     ".git",
     ".Xil",
@@ -521,30 +528,57 @@ def render_block_svg(module: ModuleDoc) -> str:
     right = [port for port in module.ports if port.direction in {"out", "buffer", "inout"}]
     height = max(180, 80 + max(len(left), len(right), 1) * 28)
     width = 860
-    rect_x, rect_y, rect_w, rect_h = 270, 50, 320, height - 90
+    rect_x, rect_y, rect_w, rect_h = 230, 50, 400, height - 90
     lines = [
         f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img">',
-        '<style>text{font-family:Inter,Arial,sans-serif;font-size:13px;fill:#111827}.pin{stroke:#106b62;stroke-width:2}.box{fill:#f7f9fc;stroke:#26323f;stroke-width:2}</style>',
+        '<style>text{font-family:Inter,Arial,sans-serif;font-size:13px;fill:#111827}.pin{stroke:#106b62;stroke-width:2;fill:none}.box{fill:#f7f9fc;stroke:#26323f;stroke-width:2}.bubble{fill:#fff;stroke:#106b62;stroke-width:2}.clock{fill:none;stroke:#106b62;stroke-width:2}</style>',
         f'<rect class="box" x="{rect_x}" y="{rect_y}" width="{rect_w}" height="{rect_h}" rx="4"/>',
         f'<text x="{rect_x + rect_w / 2}" y="{rect_y + 34}" text-anchor="middle" font-weight="700">{html.escape(module.name)}</text>',
         f'<text x="{rect_x + rect_w / 2}" y="{rect_y + 56}" text-anchor="middle">{html.escape(module.library)} {html.escape(module.kind)}</text>',
     ]
+    def is_clock(port: FieldDoc) -> bool:
+        name = port.name.lower()
+        return name in {"clk", "clock", "aclk"} or name.endswith("_clk") or name.endswith("clk")
+
+    def is_active_low(port: FieldDoc) -> bool:
+        name = port.name.lower()
+        return (
+            name.endswith("_n")
+            or "rstn" in name
+            or "resetn" in name
+            or "aresetn" in name
+            or "enable_n" in name
+            or "en_n" in name
+        )
+
     for idx, port in enumerate(left):
         y = rect_y + 80 + idx * 28
+        text_x = rect_x + 28
+        marker_x = rect_x + 12
         lines.extend(
             [
-                f'<line class="pin" x1="90" y1="{y}" x2="{rect_x}" y2="{y}"/>',
-                f'<text x="84" y="{y + 4}" text-anchor="end">{html.escape(port.name)}</text>',
+                f'<line class="pin" x1="{rect_x - 36}" y1="{y}" x2="{rect_x}" y2="{y}"/>',
+                f'<text x="{text_x}" y="{y + 4}">{html.escape(port.name)}</text>',
             ]
         )
+        if is_clock(port):
+            lines.append(f'<path class="clock" d="M {rect_x + 2} {y - 7} L {rect_x + 15} {y} L {rect_x + 2} {y + 7}"/>')
+        elif is_active_low(port):
+            lines.append(f'<circle class="bubble" cx="{marker_x}" cy="{y}" r="5"/>')
     for idx, port in enumerate(right):
         y = rect_y + 80 + idx * 28
+        text_x = rect_x + rect_w - 28
+        marker_x = rect_x + rect_w - 12
         lines.extend(
             [
-                f'<line class="pin" x1="{rect_x + rect_w}" y1="{y}" x2="770" y2="{y}"/>',
-                f'<text x="776" y="{y + 4}">{html.escape(port.name)}</text>',
+                f'<line class="pin" x1="{rect_x + rect_w}" y1="{y}" x2="{rect_x + rect_w + 36}" y2="{y}"/>',
+                f'<text x="{text_x}" y="{y + 4}" text-anchor="end">{html.escape(port.name)}</text>',
             ]
         )
+        if is_clock(port):
+            lines.append(f'<path class="clock" d="M {rect_x + rect_w - 2} {y - 7} L {rect_x + rect_w - 15} {y} L {rect_x + rect_w - 2} {y + 7}"/>')
+        elif is_active_low(port):
+            lines.append(f'<circle class="bubble" cx="{marker_x}" cy="{y}" r="5"/>')
     lines.append("</svg>")
     return "\n".join(lines)
 
@@ -646,7 +680,11 @@ def render_vcd_preview(vcd_path: Path) -> str:
             if code in samples and len(samples[code]) < 32:
                 samples[code].append((current_time, value))
     rows = []
+    seen_names: set[str] = set()
     for code, name in list(signals.items())[:16]:
+        if name in seen_names:
+            continue
+        seen_names.add(name)
         values = " | ".join(f"{time}:{value}" for time, value in samples.get(code, [])[:16])
         rows.append(f"<tr><td>{html.escape(name)}</td><td>{html.escape(values)}</td></tr>")
     if not rows:
@@ -654,7 +692,94 @@ def render_vcd_preview(vcd_path: Path) -> str:
     return '<div class="wave"><table><thead><tr><th>Signal</th><th>Samples</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
 
 
-def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = False, stop_time: str = "2us") -> dict[str, Any]:
+def imported_libraries(text: str) -> set[str]:
+    libraries = set()
+    for match in re.finditer(r"^\s*library\s+([^;]+);", text, re.IGNORECASE | re.MULTILINE):
+        for name in match.group(1).split(","):
+            lib = name.strip().lower()
+            if lib and lib not in {"ieee", "std", "work"}:
+                libraries.add(lib)
+    return libraries
+
+
+def is_vendor_bound_source(path: Path) -> bool:
+    text = read_text(path).lower()
+    libraries = imported_libraries(text)
+    if libraries & VENDOR_SIM_LIBRARIES:
+        return True
+    return False
+
+
+def source_priority(path: Path) -> tuple[int, str]:
+    text = read_text(path)
+    if PACKAGE_RE.search(text):
+        return (0, str(path))
+    return (1, str(path))
+
+
+def library_sources(root: Path, library: str) -> list[Path]:
+    sources: list[Path] = []
+    for rel in HDL_LIBRARY_DIRS.get(library, ()):
+        base = root / rel
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*")):
+            if path.is_file() and path.suffix.lower() in HDL_SUFFIXES and not should_skip(path, root):
+                if "testbench" not in rel_path(path, root).lower() and not is_vendor_bound_source(path):
+                    sources.append(path)
+    return sorted(sources, key=source_priority)
+
+
+def testbench_work_sources(testbench: Path, root: Path) -> list[Path]:
+    sources: list[Path] = []
+    for path in sorted(testbench.parent.glob("*.vhd")):
+        if path == testbench or should_skip(path, root):
+            continue
+        text = read_text(path)
+        if PACKAGE_RE.search(text):
+            sources.append(path)
+    sources.append(testbench)
+    return sources
+
+
+def run_ghdl_command(command: list[str], work: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, cwd=work, check=True, capture_output=True, text=True)
+
+
+def analyze_sources(
+    ghdl: str,
+    root: Path,
+    work: Path,
+    library: str,
+    sources: list[Path],
+    status: dict[str, Any],
+) -> None:
+    pending = list(dict.fromkeys(sources))
+    failed: dict[str, str] = {}
+    analyzed: list[str] = []
+    progress = True
+    while pending and progress:
+        progress = False
+        remaining: list[Path] = []
+        for source in pending:
+            command = [ghdl, "-a", *GHDL_BASE_ARGS, f"-P{work}", f"--work={library}", f"--workdir={work}", str(source)]
+            try:
+                run_ghdl_command(command, work)
+                analyzed.append(rel_path(source, root))
+                failed.pop(str(source), None)
+                progress = True
+            except subprocess.CalledProcessError as exc:
+                failed[str(source)] = (exc.stderr or exc.stdout or "").strip()[-1200:]
+                remaining.append(source)
+        pending = remaining
+    status.setdefault("analyzed", {}).setdefault(library, []).extend(analyzed)
+    if pending:
+        status.setdefault("analysis_skipped", {}).setdefault(library, [])
+        for source in pending:
+            status["analysis_skipped"][library].append({"path": rel_path(source, root), "reason": failed.get(str(source), "analysis failed")})
+
+
+def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = False, stop_time: str = "100us") -> dict[str, Any]:
     ghdl = shutil.which("ghdl")
     sim_dir = out / "simulations" / module_slug(testbench.name)
     sim_dir.mkdir(parents=True, exist_ok=True)
@@ -665,34 +790,60 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
         (sim_dir / "simulation_status.json").write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
         return status
     tb_path = root / testbench.path
-    sources = sorted(path for path in tb_path.parent.rglob("*.vhd") if not should_skip(path, root))
-    if tb_path not in sources:
-        sources.append(tb_path)
+    tb_text = read_text(tb_path)
+    libraries = sorted(imported_libraries(tb_text) & set(HDL_LIBRARY_DIRS))
+    if not libraries:
+        if "dsp/hdl/testbenches" in testbench.path:
+            libraries.append("raddsp")
+        elif "interfaces/hdl/radif/testbenches" in testbench.path:
+            libraries.append("radif")
+        elif "debug/radila" in testbench.path:
+            libraries.append("radila")
     with tempfile.TemporaryDirectory(prefix="radhdl-ghdl-") as td:
         work = Path(td)
+        status = {"backend": "ghdl", "testbench": testbench.name, "status": "running", "libraries": libraries}
         try:
-            for source in sources:
-                subprocess.run([ghdl, "-a", "--std=08", str(source)], cwd=work, check=True, capture_output=True, text=True)
-            subprocess.run([ghdl, "-e", "--std=08", testbench.name], cwd=work, check=True, capture_output=True, text=True)
+            for library in libraries:
+                analyze_sources(ghdl, root, work, library, library_sources(root, library), status)
+            analyze_sources(ghdl, root, work, "work", testbench_work_sources(tb_path, root), status)
+            run_ghdl_command([ghdl, "-e", *GHDL_BASE_ARGS, f"-P{work}", f"--workdir={work}", testbench.name], work)
             vcd = sim_dir / f"{testbench.name}.vcd"
-            subprocess.run([ghdl, "-r", "--std=08", testbench.name, f"--vcd={vcd}", f"--stop-time={stop_time}"], cwd=work, check=True, capture_output=True, text=True)
-            status = {"backend": "ghdl", "testbench": testbench.name, "status": "passed", "vcd": str(vcd)}
+            completed = run_ghdl_command(
+                [ghdl, "-r", *GHDL_BASE_ARGS, f"-P{work}", f"--workdir={work}", testbench.name, f"--vcd={vcd}", f"--stop-time={stop_time}"],
+                work,
+            )
+            status.update(
+                {
+                    "status": "passed",
+                    "vcd": str(vcd),
+                    "stdout": completed.stdout[-4000:] if completed.stdout else "",
+                    "stderr": completed.stderr[-4000:] if completed.stderr else "",
+                }
+            )
         except subprocess.CalledProcessError as exc:
-            status = {
-                "backend": "ghdl",
-                "testbench": testbench.name,
-                "status": "failed",
-                "returncode": exc.returncode,
-                "stdout": exc.stdout[-4000:] if exc.stdout else "",
-                "stderr": exc.stderr[-4000:] if exc.stderr else "",
-            }
+            status.update(
+                {
+                    "status": "failed",
+                    "returncode": exc.returncode,
+                    "stdout": exc.stdout[-4000:] if exc.stdout else "",
+                    "stderr": exc.stderr[-4000:] if exc.stderr else "",
+                }
+            )
             if strict:
                 raise RuntimeError(f"GHDL simulation failed for {testbench.name}: {exc.stderr}") from exc
     (sim_dir / "simulation_status.json").write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
     return status
 
 
-def render_testbenches(module: ModuleDoc, root: Path, out: Path, run_sims: bool, strict: bool) -> str:
+def render_testbenches(
+    module: ModuleDoc,
+    root: Path,
+    out: Path,
+    run_sims: bool,
+    strict: bool,
+    stop_time: str,
+    sim_cache: dict[str, dict[str, Any]],
+) -> str:
     parts = ["<h2>Testbenches and Waveforms</h2>"]
     if not module.testbenches:
         parts.append('<p class="summary">No directly associated testbench was found.</p>')
@@ -701,24 +852,51 @@ def render_testbenches(module: ModuleDoc, root: Path, out: Path, run_sims: bool,
     for bench in module.testbenches:
         status = bench.simulation
         if run_sims:
-            status = run_ghdl(bench, root, out, strict)
+            status = sim_cache.get(bench.name)
+            if status is None:
+                status = run_ghdl(bench, root, out, strict, stop_time)
+                sim_cache[bench.name] = status
             bench.simulation = status
         state = status.get("status", "not-run") if status else "not-run"
-        rows.append(f"<tr><td>{html.escape(bench.name)}</td><td>{html.escape(bench.path)}</td><td>{html.escape(state)}</td></tr>")
+        artifact_links = []
+        status_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / "simulation_status.json"
+        if status:
+            artifact_links.append(f'<a href="{html.escape(str(status_path))}">status</a>')
+        if status.get("vcd"):
+            vcd_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / f"{module_slug(bench.name)}.vcd"
+            artifact_links.append(f'<a href="{html.escape(str(vcd_path))}">vcd</a>')
+        rows.append(
+            f"<tr><td>{html.escape(bench.name)}</td><td>{html.escape(bench.path)}</td>"
+            f"<td>{html.escape(state)}</td><td>{', '.join(artifact_links) or ''}</td></tr>"
+        )
         if state == "skipped":
             parts.append(f'<div class="status">{html.escape(bench.name)} simulation skipped: {html.escape(status.get("reason", ""))}</div>')
+        if state == "failed":
+            reason = (status.get("stderr") or status.get("stdout") or "").strip().splitlines()
+            if not reason and status.get("analysis_skipped"):
+                reason = [json.dumps(status["analysis_skipped"])[:300]]
+            message = reason[0] if reason else "GHDL simulation failed; see status JSON for details."
+            parts.append(f'<div class="status">{html.escape(bench.name)} simulation failed: {html.escape(message)}</div>')
         if status.get("vcd"):
             parts.append(render_vcd_preview(Path(status["vcd"])))
     parts.insert(
         1,
-        "<table><thead><tr><th>Testbench</th><th>Source</th><th>Simulation</th></tr></thead><tbody>"
+        "<table><thead><tr><th>Testbench</th><th>Source</th><th>Simulation</th><th>Artifacts</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>",
     )
     return "".join(parts)
 
 
-def render_module(module: ModuleDoc, root: Path, out: Path, run_sims: bool, strict: bool) -> None:
+def render_module(
+    module: ModuleDoc,
+    root: Path,
+    out: Path,
+    run_sims: bool,
+    strict: bool,
+    stop_time: str,
+    sim_cache: dict[str, dict[str, Any]],
+) -> None:
     module_dir = out / "modules" / module_slug(module.name)
     module_dir.mkdir(parents=True, exist_ok=True)
     body = f"""
@@ -736,7 +914,7 @@ def render_module(module: ModuleDoc, root: Path, out: Path, run_sims: bool, stri
   {field_table("Generics", module.generics, include_direction=False)}
   {field_table("Ports", module.ports, include_direction=True)}
   {render_register_maps(module)}
-  {render_testbenches(module, root, out, run_sims, strict)}
+  {render_testbenches(module, root, out, run_sims, strict, stop_time, sim_cache)}
   <h2>HDL Example</h2>
   {source_snippet(module, root)}
   <h2>Sources</h2>
@@ -828,11 +1006,26 @@ def build_docs(args: argparse.Namespace) -> int:
     out.mkdir(parents=True)
     write_css(out)
     modules, benches, maps = catalog(root)
+    sim_cache: dict[str, dict[str, Any]] = {}
     for module in modules:
-        render_module(module, root, out, args.run_sims, args.strict)
+        render_module(module, root, out, args.run_sims, args.strict, args.stop_time, sim_cache)
     render_library_pages(modules, out)
     render_index(modules, benches, maps, out, root)
-    (out / "catalog.json").write_text(json.dumps(json_catalog(root), indent=2) + "\n", encoding="utf-8")
+    (out / "catalog.json").write_text(
+        json.dumps(
+            {
+                "schema": "radhdl-docgen-catalog",
+                "version": VERSION,
+                "radhdl": str(root),
+                "modules": [asdict(module) for module in modules],
+                "testbenches": [asdict(bench) for bench in benches],
+                "register_maps": [asdict(regmap) for regmap in maps],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(f"Generated {len(modules)} RadHDL datasheets at {out}")
     return 0
 
@@ -846,7 +1039,7 @@ def build_one_module(args: argparse.Namespace) -> int:
         raise ValueError(f"module not found: {args.name}")
     out.mkdir(parents=True, exist_ok=True)
     write_css(out)
-    render_module(module, root, out, args.run_sims, args.strict)
+    render_module(module, root, out, args.run_sims, args.strict, args.stop_time, {})
     print(out / "modules" / module_slug(module.name) / "index.html")
     return 0
 
@@ -877,6 +1070,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_parser_.add_argument("--out", type=Path, required=True)
     build_parser_.add_argument("--run-sims", action="store_true", help="Run associated testbenches with GHDL when available.")
     build_parser_.add_argument("--strict", action="store_true", help="Fail on simulation/tool errors instead of recording skips.")
+    build_parser_.add_argument("--stop-time", default="100us", help="GHDL --stop-time used for generated waveform runs.")
 
     module_parser = sub.add_parser("module", help="Generate one module datasheet.")
     module_parser.add_argument("name")
@@ -884,13 +1078,14 @@ def build_parser() -> argparse.ArgumentParser:
     module_parser.add_argument("--out", type=Path, required=True)
     module_parser.add_argument("--run-sims", action="store_true")
     module_parser.add_argument("--strict", action="store_true")
+    module_parser.add_argument("--stop-time", default="100us")
 
     sim_parser = sub.add_parser("sim", help="Run one testbench and capture waveform status.")
     sim_parser.add_argument("testbench")
     sim_parser.add_argument("--radhdl", type=Path, default=Path.cwd())
     sim_parser.add_argument("--out", type=Path, required=True)
     sim_parser.add_argument("--strict", action="store_true")
-    sim_parser.add_argument("--stop-time", default="2us")
+    sim_parser.add_argument("--stop-time", default="100us")
     return parser
 
 
