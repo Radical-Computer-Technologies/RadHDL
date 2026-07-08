@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library radif;
-use radif.radif_pkg.all;
+use work.radif_pkg.all;
 
 -- QSPI slave bridge to the RadIF register transaction interface.
 -- Maps serial quad-SPI command traffic onto a compact internal register bus for embedded control planes.

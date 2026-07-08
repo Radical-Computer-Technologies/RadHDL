@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- AXI-stream floating-point to fixed-point conversion stage.
 -- Quantizes floating-point sample lanes into saturated fixed-point values for FPGA-efficient downstream processing.

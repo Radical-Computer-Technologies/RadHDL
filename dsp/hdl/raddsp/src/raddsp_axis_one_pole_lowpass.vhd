@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- AXI-stream one-pole low-pass filter.
 -- Implements a lightweight recursive smoothing stage for control, envelope, and slowly varying DSP signals.
@@ -135,7 +134,7 @@ begin
     m_axis_tdata <= out_data_r;
     m_axis_tlast <= out_last_r;
 
-    dsp_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+    dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
       generic map (
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => C_DELTA_WIDTH,

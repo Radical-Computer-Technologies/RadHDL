@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- Multi-channel AXI-stream FIR filter.
 -- Applies fixed-point tap coefficients to streaming samples with frame-aware handshaking and vendor-portable arithmetic.
@@ -178,7 +177,7 @@ begin
 
     gen_mul_lanes : for lane in 0 to C_DSP_LANES - 1 generate
     begin
-      dsp_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+      dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
         generic map (
           DEVICE_FAMILY => DEVICE_FAMILY,
           A_WIDTH => DATA_WIDTH,

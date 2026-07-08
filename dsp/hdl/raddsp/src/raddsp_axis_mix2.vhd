@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- Two-input AXI-stream mixer for fixed-point sample lanes.
 -- Combines streams with programmable weighting or arithmetic selection while preserving flow-control semantics.

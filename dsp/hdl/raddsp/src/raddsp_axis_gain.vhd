@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- Multi-channel AXI-stream fixed-point gain stage.
 -- Multiplies each sample lane by an independent programmable coefficient, scales by fractional bits, saturates, and forwards frame metadata.
@@ -105,7 +104,7 @@ begin
 
     gen_mul_lanes : for channel in 0 to CHANNEL_COUNT - 1 generate
     begin
-      dsp_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+      dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
         generic map (
           DEVICE_FAMILY => DEVICE_FAMILY,
           A_WIDTH => DATA_WIDTH,

@@ -2,7 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
 use work.zc_reference_pkg.all;
 
 -- Streaming Zadoff-Chu cross-correlator primitive.
@@ -123,7 +122,7 @@ begin
   corr_q <= corr_q_reg;
   corr_mag_sq <= mag_reg;
 
-  rr_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+  rr_mul_i: entity work.raddsp_xilinx_dsp48_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
@@ -131,7 +130,7 @@ begin
       valid_o => rr_valid, subtract_o => unused_sub0, last_o => unused_last0, p_o => rr_p
     );
 
-  qq_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+  qq_mul_i: entity work.raddsp_xilinx_dsp48_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
@@ -139,7 +138,7 @@ begin
       valid_o => unused_valid0, subtract_o => unused_sub1, last_o => unused_last1, p_o => qq_p
     );
 
-  qi_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+  qi_mul_i: entity work.raddsp_xilinx_dsp48_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
@@ -147,7 +146,7 @@ begin
       valid_o => unused_valid1, subtract_o => unused_sub2, last_o => unused_last2, p_o => qi_p
     );
 
-  iq_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+  iq_mul_i: entity work.raddsp_xilinx_dsp48_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
@@ -155,7 +154,7 @@ begin
       valid_o => unused_valid2, subtract_o => unused_sub3, last_o => unused_last3, p_o => iq_p
     );
 
-  mag_square_i: entity raddsp.raddsp_xilinx_dsp48_square_seq
+  mag_square_i: entity work.raddsp_xilinx_dsp48_square_seq
     generic map (
       DEVICE_FAMILY => DEVICE_FAMILY,
       WIDTH         => G_ACC_WIDTH

@@ -2,7 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
 
 -- Sequential DSP48 square helper for Xilinx FPGA targets.
 -- Computes squared signed samples with explicit handshake timing for resource-conscious DSP pipelines.
@@ -80,7 +79,7 @@ begin
   valid_o <= valid_reg;
   y_o <= y_reg;
 
-  mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+  mul_i: entity work.raddsp_xilinx_dsp48_mul
     generic map (
       DEVICE_FAMILY => DEVICE_FAMILY,
       A_WIDTH       => C_LIMB_BITS + 1,

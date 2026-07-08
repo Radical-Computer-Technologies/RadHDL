@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- AXI-stream frame statistics accumulator.
 -- Computes per-frame metrics such as count, extrema, and energy-style summaries while preserving stream boundaries.
@@ -93,7 +92,7 @@ begin
     sum_squares_o <= std_logic_vector(power_out_r);
     sample_count_o <= std_logic_vector(count_out_r);
 
-    square_i: entity raddsp.raddsp_xilinx_dsp48_mul
+    square_i: entity work.raddsp_xilinx_dsp48_mul
       generic map (
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,

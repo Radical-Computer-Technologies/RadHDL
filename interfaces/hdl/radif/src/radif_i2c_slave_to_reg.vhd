@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library radif;
-use radif.radif_pkg.all;
+use work.radif_pkg.all;
 
 -- I2C slave bridge to the RadIF register transaction interface.
 -- Decodes host I2C register accesses and presents them as synchronous register read/write requests.

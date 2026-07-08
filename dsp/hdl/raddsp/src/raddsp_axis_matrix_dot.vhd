@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- AXI-stream matrix/vector dot-product accelerator.
 -- Consumes fixed-point matrix and vector lanes and emits accumulated dot products for linear algebra DSP blocks.
@@ -89,7 +88,7 @@ begin
     m_axis_tlast <= out_valid_r;
     sample_count_o <= std_logic_vector(count_r);
 
-    dsp_mul_i: entity raddsp.raddsp_xilinx_dsp48_mul
+    dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
       generic map (
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,

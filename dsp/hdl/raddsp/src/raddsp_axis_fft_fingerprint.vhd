@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
-use raddsp.raddsp_axis_pkg.all;
+use work.raddsp_axis_pkg.all;
 
 -- AXI-stream spectral fingerprint extraction core.
 -- Condenses FFT output into compact bin-energy features that can be compared against stored fingerprints.

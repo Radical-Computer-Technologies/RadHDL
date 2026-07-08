@@ -2,7 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library raddsp;
 
 -- AXI-stream complex magnitude-squared stage for IQ samples.
 -- Computes I*I plus Q*Q energy values for detection, normalization, and spectral analysis pipelines.
@@ -72,7 +71,7 @@ begin
     m_axis_tdata <= out_data_r;
     m_axis_tlast <= out_last_r;
 
-    i_square_i: entity raddsp.raddsp_xilinx_dsp48_mul
+    i_square_i: entity work.raddsp_xilinx_dsp48_mul
       generic map (
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,
@@ -84,7 +83,7 @@ begin
         valid_o => ii_valid, subtract_o => unused_sub0, last_o => ii_last, p_o => ii_p
       );
 
-    q_square_i: entity raddsp.raddsp_xilinx_dsp48_mul
+    q_square_i: entity work.raddsp_xilinx_dsp48_mul
       generic map (
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,

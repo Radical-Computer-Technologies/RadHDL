@@ -190,9 +190,8 @@ def category_for(path: Path, root: Path) -> str:
 
 def library_for(path: Path, root: Path) -> str:
     parts = rel_path(path, root).split(os.sep)
-    for candidate in ("raddsp", "radif", "radila"):
-        if candidate in parts:
-            return candidate
+    if any(candidate in parts for candidate in ("raddsp", "radif", "radila")):
+        return "radhdl"
     if parts:
         return parts[0]
     return "radhdl"
@@ -724,6 +723,21 @@ def dsp_package_group(module: ModuleDoc) -> str:
     if any(token in haystack for token in ("fft", "cordic", "dds", "gain", "mix", "magnitude", "fixed_to_float", "float_to_fixed")):
         return "Transform"
     return "Misc"
+
+
+def interface_include_package(module: ModuleDoc) -> str:
+    name = module.name.lower()
+    if "i2c" in name:
+        return "interfaces_i2c"
+    if "smi" in name:
+        return "interfaces_smi"
+    if "spi" in name or "qspi" in name:
+        return "interfaces_spi"
+    if "reg_bank" in name or "reg_interconnect" in name:
+        return "interfaces_regbank"
+    if "axi" in name or "axis" in name:
+        return "interfaces_axi"
+    return "interfaces"
 
 
 def package_group(module: ModuleDoc) -> str:
@@ -1310,7 +1324,19 @@ def use_cases(module: ModuleDoc) -> list[str]:
 
 
 def vhdl_include_template(module: ModuleDoc) -> str:
-    library = module.library if module.library else "work"
+    library = module.library if module.library else "radhdl"
+    if module.category == "DSP":
+        subgroup = f"dsp_{dsp_package_group(module).lower()}"
+        umbrella = "dsp"
+    elif module.category == "Interfaces":
+        subgroup = interface_include_package(module)
+        umbrella = "interfaces"
+    elif module.category == "Debug":
+        subgroup = "debug"
+        umbrella = "debug"
+    else:
+        subgroup = ""
+        umbrella = ""
     lines = [
         "library ieee;",
         "use ieee.std_logic_1164.all;",
@@ -1318,9 +1344,11 @@ def vhdl_include_template(module: ModuleDoc) -> str:
         "",
         f"library {library};",
         "-- Direct entity instantiation below does not require importing the entity name.",
-        "-- Add package imports only when your surrounding design needs package types/constants, for example:",
-        f"-- use {library}.<package_name>.all;",
     ]
+    if umbrella:
+        lines.append(f"use {library}.{umbrella}.all;")
+    if subgroup and subgroup != umbrella:
+        lines.append(f"-- Narrower alternative: use {library}.{subgroup}.all;")
     return "\n".join(lines)
 
 

@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library radif;
-use radif.radif_pkg.all;
+use work.radif_pkg.all;
 
 -- Configurable RadIF register bank with software-visible storage.
 -- Provides ready/valid read and write responses for a parameterized set of memory-mapped control/status registers.

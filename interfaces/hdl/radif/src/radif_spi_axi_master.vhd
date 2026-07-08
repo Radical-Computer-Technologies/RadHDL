@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library radif;
-use radif.radif_pkg.all;
+use work.radif_pkg.all;
 
 -- SPI-controlled AXI master bridge.
 -- Accepts SPI command traffic and issues AXI-style memory transactions for systems that need a serial control/debug path.

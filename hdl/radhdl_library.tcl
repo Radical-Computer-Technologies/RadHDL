@@ -2,20 +2,67 @@
 
 namespace eval ::RadHDL {
     variable ROOT [file normalize [file join [file dirname [info script]] ..]]
+    variable RADHDL_API_FILES [list \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_detection.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_filter.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_matrix.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_transform.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_axi.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_i2c.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_regbank.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_smi.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_spi.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src debug.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_context.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_context.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src debug_context.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src radhdl_context.vhd] \
+    ]
     variable DEBUG_RADILA_FILES [list \
         [file join $::RadHDL::ROOT debug radila hdl radila radila_core.vhd] \
         [file join $::RadHDL::ROOT debug radila hdl radila raddebughub_axi.vhd] \
         [file join $::RadHDL::ROOT debug radila hdl radila radila_axi_top.vhd] \
     ]
     variable DSP_RADDSP_RAW_FILES [list \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_pkg.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src zc_reference_pkg.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src cordic_atan_pkg.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_fft_twiddle_pkg.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src fft_tdp_ram.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_fft_twiddle_rom.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_square_seq.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_wide_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src cordic_atan2.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src fft_radix2_batch_core.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_gain.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_mix2.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_one_pole_lowpass.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fir.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_biquad.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_dds.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_float_to_fixed.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fixed_to_float.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_iq_magnitude_sq.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_frame_stats.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fft_fingerprint.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fingerprint_matcher.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_matrix_elementwise.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_matrix_dot.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fft_bin_product.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_batch.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_radix2_tdp.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_radix4_tdp.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_parallel8.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_iterative.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_streaming.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_radfft_ddr.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src zc_cross_correlator.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src zc_peak_detector.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src zc_chirp_frame_detector.vhd] \
-        [file join $::RadHDL::ROOT dsp hdl raddsp src cordic_atan2.vhd] \
-        [file join $::RadHDL::ROOT dsp hdl raddsp src fft_radix2_batch_core.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp wrappers raddsp_zc_chirp_frame_detector.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp wrappers raddsp_cordic_atan2.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp wrappers raddsp_fft_radix2_batch_core.vhd] \
@@ -39,15 +86,32 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT dsp hdl xci raddsp_fft_radix2_batch_core_0 src raddsp_fft_radix2_batch_core.vhd] \
         [file join $::RadHDL::ROOT dsp hdl xci raddsp_fft_radix2_batch_core_0 synth raddsp_fft_radix2_batch_core_0.vhd] \
     ]
+    variable INTERFACES_RADIF_FILES [list \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_pkg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_bank.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_interconnect.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_axi_lite_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_spi_slave_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_qspi_slave_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_i2c_slave_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_smi16_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_axi4_axis_dma.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_spi_axi_master.vhd] \
+    ]
     variable DSP_RADDSP_IP_REPO [file join $ROOT dsp hdl iprepo]
 
     proc files {library} {
         variable DEBUG_RADILA_FILES
+        variable RADHDL_API_FILES
         variable DSP_RADDSP_RAW_FILES
         variable DSP_RADDSP_XCI_FILES
         variable DSP_RADDSP_XCI_VHDL_FILES
+        variable INTERFACES_RADIF_FILES
 
         switch -- $library {
+            radhdl.api { return $RADHDL_API_FILES }
+            radhdl.all { return [concat $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
+            all { return [concat $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
             debug.radila { return $DEBUG_RADILA_FILES }
             debug { return $DEBUG_RADILA_FILES }
             dsp.raddsp.raw { return $DSP_RADDSP_RAW_FILES }
@@ -56,6 +120,8 @@ namespace eval ::RadHDL {
             dsp.xci { return $DSP_RADDSP_XCI_FILES }
             dsp.raddsp.xci_vhdl { return $DSP_RADDSP_XCI_VHDL_FILES }
             dsp.xci_vhdl { return $DSP_RADDSP_XCI_VHDL_FILES }
+            interfaces.radif { return $INTERFACES_RADIF_FILES }
+            interfaces { return $INTERFACES_RADIF_FILES }
             default { error "unknown RadHDL library '$library'" }
         }
     }

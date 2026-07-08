@@ -2,8 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library radif;
-use radif.radif_pkg.all;
+use work.radif_pkg.all;
 
 -- SPI slave bridge to the RadIF register transaction interface.
 -- Decodes serial host register accesses into synchronous internal read/write requests.
