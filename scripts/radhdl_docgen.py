@@ -25,6 +25,9 @@ HDL_LIBRARY_DIRS = {
     "radif": ("interfaces/hdl/radif/src",),
     "radila": ("debug/radila/hdl/radila",),
 }
+HDL_SIM_MODEL_DIRS = {
+    "radif": ("interfaces/hdl/radif/sim",),
+}
 VENDOR_SIM_LIBRARIES = {"xpm", "unisim", "unimacro", "unisims_ver"}
 GHDL_BASE_ARGS = ["--std=08", "--ieee=synopsys"]
 EXCLUDED_PARTS = {
@@ -67,6 +70,7 @@ class FieldDoc:
 class TestbenchDoc:
     name: str
     path: str
+    description: str = ""
     related_modules: list[str] = field(default_factory=list)
     simulation: dict[str, Any] = field(default_factory=dict)
 
@@ -319,10 +323,13 @@ def discover_testbenches(root: Path) -> list[TestbenchDoc]:
             continue
         rel = rel_path(path, root)
         text = read_text(path)
+        lines = text.splitlines()
         for match in ENTITY_RE.finditer(text):
             name = match.group(1)
             if name.lower().startswith("tb_") or "testbench" in rel.lower() or "testbenches" in rel.lower():
-                benches.append(TestbenchDoc(name=name, path=rel))
+                line_index = text[: match.start()].count("\n")
+                description = comment_block_before(lines, line_index)
+                benches.append(TestbenchDoc(name=name, path=rel, description=description))
     return benches
 
 
@@ -1511,6 +1518,13 @@ def library_sources(root: Path, library: str) -> list[Path]:
             if path.is_file() and path.suffix.lower() in HDL_SUFFIXES and not should_skip(path, root):
                 if "testbench" not in rel_path(path, root).lower() and not is_vendor_bound_source(path):
                     sources.append(path)
+    for rel in HDL_SIM_MODEL_DIRS.get(library, ()):
+        base = root / rel
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*")):
+            if path.is_file() and path.suffix.lower() in HDL_SUFFIXES:
+                sources.append(path)
     return sorted(sources, key=source_priority)
 
 
@@ -1652,6 +1666,7 @@ def render_testbenches(
     if not module.testbenches:
         parts.append('<p class="summary">No directly associated testbench was found.</p>')
         return "".join(parts)
+    rendered = 0
     for bench in module.testbenches:
         status = bench.simulation
         if run_sims:
@@ -1661,28 +1676,36 @@ def render_testbenches(
                 sim_cache[bench.name] = status
             bench.simulation = status
         state = status.get("status", "not-run") if status else "not-run"
+        if run_sims and state != "passed":
+            continue
         artifact_links = []
         status_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / "simulation_status.json"
         if status:
             artifact_links.append(f'<a href="{html.escape(str(status_path))}">status</a>')
-        if status.get("vcd"):
+        if status.get("vcd") and state == "passed":
             vcd_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / f"{module_slug(bench.name)}.vcd"
             artifact_links.append(f'<a href="{html.escape(str(vcd_path))}">vcd</a>')
-        if status.get("vcd"):
+        if status.get("vcd") and state == "passed":
             waveform = render_vcd_preview(out / status["vcd"], bench.path)
-        else:
+        elif not run_sims:
             waveform = render_port_waveform_sketch(module, bench.path)
+        else:
+            waveform = ""
         artifact_html = f'<p class="meta">Artifacts: {", ".join(artifact_links)}</p>' if artifact_links else ""
-        status_label = "captured waveform" if status.get("vcd") else "interface timing diagram"
+        status_label = "captured waveform" if status.get("vcd") and state == "passed" else "interface timing diagram" if waveform else "waveform unavailable"
         parts.append(
             '<details class="testbench-section">'
             f'<summary>{html.escape(bench.name)} <span class="meta">{html.escape(status_label)}</span></summary>'
             '<div class="testbench-body">'
             f'<p class="meta">Source: {html.escape(bench.path)}</p>'
+            f'{paragraph(bench.description, "No testbench description has been written yet.")}'
             f"{artifact_html}"
             f"{waveform}"
             "</div></details>"
         )
+        rendered += 1
+    if rendered == 0:
+        parts.append('<p class="summary">No passing testbench waveform is available for this module.</p>')
     return "".join(parts)
 
 

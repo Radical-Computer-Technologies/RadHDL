@@ -4,8 +4,13 @@ use ieee.numeric_std.all;
 
 library radif;
 
--- Self-checking or stimulus-focused testbench for interfaces smoke.
--- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
+-- Interface elaboration and idle-state smoke testbench.
+--
+-- This bench instantiates the RADIF SPI, QSPI, I2C, DMA, and SPI-to-AXI blocks
+-- together to catch compile/elaboration issues and verify reset-idle behavior
+-- for shared interface wrappers. It intentionally does not drive complete bus
+-- transactions; it checks that inactive SPI/QSPI pins remain tri-stated after
+-- reset. Use the module-specific testbenches for transaction waveforms.
 entity tb_radif_interfaces_smoke is
 end entity;
 

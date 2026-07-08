@@ -4,8 +4,16 @@ use ieee.numeric_std.all;
 
 library radif;
 
--- Self-checking or stimulus-focused testbench for axi4 axis dma.
--- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
+-- Self-checking DMA transaction testbench.
+--
+-- This bench programs the RADIF AXI4/AXIS DMA register interface for one
+-- MM2S transfer and one S2MM transfer. The MM2S sequence writes base/end/length
+-- registers, enables MM2S, accepts one AXI read beat at address 0x00000100,
+-- and checks that the read payload appears on the output AXI-Stream port. The
+-- S2MM sequence writes base/end/length registers, enables S2MM, presents one
+-- input AXI-Stream beat, and checks that the DMA emits one AXI write beat at
+-- address 0x00000200 with the expected payload. The waveform should show the
+-- register programming phase followed by AR/R and AW/W/B channel activity.
 entity tb_radif_axi4_axis_dma is
 end entity;
 
