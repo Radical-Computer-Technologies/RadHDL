@@ -664,6 +664,43 @@ def module_doc_slug(module: ModuleDoc) -> str:
     return module_slug(f"{package_group(module)}__{source_package_group(module)}__{module.name}")
 
 
+def register_count(module: ModuleDoc) -> int:
+    return sum(len(regmap.registers) for regmap in module.register_maps)
+
+
+def register_search_text(module: ModuleDoc) -> str:
+    parts: list[str] = []
+    for regmap in module.register_maps:
+        parts.extend([regmap.name, regmap.description, regmap.path])
+        for register in regmap.registers:
+            parts.extend([register.name, register.description, register.offset, register.access, register.reset])
+            for field in register.fields:
+                parts.extend(
+                    [
+                        str(field.get("name", "")),
+                        str(field.get("description", "")),
+                        str(field.get("bits", "")),
+                        str(field.get("lsb", "")),
+                        str(field.get("msb", "")),
+                    ]
+                )
+    return " ".join(part for part in parts if part).lower()
+
+
+def render_module_quick_links(module: ModuleDoc) -> str:
+    links: list[str] = []
+    regs = register_count(module)
+    if regs:
+        map_names = ", ".join(regmap.name for regmap in module.register_maps)
+        label = f"Register maps: {map_names} ({regs} registers)"
+        links.append(f'<a class="pill" href="#register-maps">{html.escape(label)}</a>')
+    if module.testbenches:
+        links.append(f'<a class="pill" href="#testbenches">Testbenches: {len(module.testbenches)}</a>')
+    if not links:
+        return ""
+    return f'<div class="quick-links">{"".join(links)}</div>'
+
+
 def docs_version(out: Path) -> str:
     return out.name or "current"
 
@@ -702,6 +739,11 @@ h3 {{ margin-top: 24px; }}
 .datasheet-link-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 14px; }}
 .datasheet-link-row:first-child {{ border-top: 0; }}
 .datasheet-link-row .meta {{ white-space: nowrap; }}
+.quick-links {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
+.pill {{ display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); color: var(--link); padding: 5px 10px; font-size: 13px; font-weight: 700; }}
+.pill:hover {{ text-decoration: none; border-color: var(--accent); }}
+.register-index .datasheet-list {{ max-height: 340px; }}
+.register-index .datasheet-link-row {{ align-items: baseline; }}
 .doc-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
 .doc-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; color: var(--ink); }}
 .doc-section-body {{ padding: 0 12px 12px; }}
@@ -1065,7 +1107,7 @@ def render_register_field_table(register: RegisterDoc) -> str:
 def render_register_maps(module: ModuleDoc) -> str:
     if not module.register_maps:
         return ""
-    parts = ["<h2>Register Maps</h2>"]
+    parts = ['<h2 id="register-maps">Register Maps</h2>']
     for regmap in module.register_maps:
         parts.append(f"<h3>{html.escape(regmap.name)}</h3>")
         parts.append(f'<p class="meta">Source: {html.escape(regmap.path)}</p>')
@@ -1662,7 +1704,7 @@ def render_testbenches(
     stop_time: str,
     sim_cache: dict[str, dict[str, Any]],
 ) -> str:
-    parts = ["<h2>Testbenches</h2>"]
+    parts = ['<h2 id="testbenches">Testbenches</h2>']
     if not module.testbenches:
         parts.append('<p class="summary">No directly associated testbench was found.</p>')
         return "".join(parts)
@@ -1728,6 +1770,7 @@ def render_module(
   <h1>{html.escape(module.name)}</h1>
   <div class="meta">Documentation version: {html.escape(version)} / Package: {html.escape(package_group(module))} / Source package: {html.escape(source_package_group(module))}</div>
   <div class="summary">{paragraph(module.description, "No source description has been written for this module yet.")}</div>
+  {render_module_quick_links(module)}
 </div></header>
 <main class="wrap">
   <h2>Use Cases</h2>
@@ -1797,6 +1840,8 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
             )
             rows = []
             for module in package_modules:
+                regs = register_count(module)
+                register_meta = f" / {regs} registers" if regs else ""
                 search_text = " ".join(
                     [
                         module.name,
@@ -1805,13 +1850,14 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
                         package,
                         source_package_group(module),
                         module.description.splitlines()[0] if module.description else "",
+                        register_search_text(module),
                     ]
                 ).lower()
                 rows.append(
                     '<div class="datasheet-link-row" '
                     f'data-datasheet-item data-search="{html.escape(search_text)}">'
                     f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
-                    f'<span class="meta">{html.escape(source_package_group(module))} / {len(module.ports)} ports / {len(module.generics)} generics</span>'
+                    f'<span class="meta">{html.escape(source_package_group(module))} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
                     "</div>"
                 )
             package_sections.append(
@@ -1858,6 +1904,59 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     )
 
 
+def render_register_index(modules: list[ModuleDoc]) -> str:
+    register_modules = sorted(
+        [module for module in modules if module.register_maps],
+        key=lambda item: (item.category.lower(), package_group(item).lower(), item.name.lower()),
+    )
+    if not register_modules:
+        return '<p class="summary">No module datasheets currently declare register maps.</p>'
+    rows = []
+    for module in register_modules:
+        map_names = ", ".join(regmap.name for regmap in module.register_maps)
+        regs = register_count(module)
+        search_text = " ".join(
+            [
+                module.name,
+                module.library,
+                module.category,
+                package_group(module),
+                source_package_group(module),
+                map_names,
+                register_search_text(module),
+            ]
+        ).lower()
+        rows.append(
+            '<div class="datasheet-link-row" '
+            f'data-register-item data-search="{html.escape(search_text)}">'
+            f'<a href="modules/{module_doc_slug(module)}/index.html#register-maps">{html.escape(module.name)}</a>'
+            f'<span class="meta">{html.escape(package_group(module))} / {html.escape(map_names)} / {regs} registers</span>'
+            "</div>"
+        )
+    script = """
+<script>
+(() => {
+  const input = document.querySelector("[data-register-search]");
+  if (!input) return;
+  const apply = () => {
+    const query = input.value.trim().toLowerCase();
+    document.querySelectorAll("[data-register-item]").forEach((row) => {
+      row.hidden = query && !row.dataset.search.includes(query);
+    });
+  };
+  input.addEventListener("input", apply);
+})();
+</script>
+""".strip()
+    return (
+        '<section class="datasheet-browser register-index">'
+        '<input class="datasheet-search" type="search" data-register-search placeholder="Search register-map datasheets">'
+        f'<div class="datasheet-list">{"".join(rows)}</div>'
+        f"{script}"
+        "</section>"
+    )
+
+
 def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], out: Path, root: Path) -> None:
     version = docs_version(out)
     body = f"""
@@ -1875,6 +1974,8 @@ def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: li
     <tr><th>Testbenches</th><td>{len(benches)}</td></tr>
     <tr><th>Register maps</th><td>{len(maps)}</td></tr>
   </tbody></table>
+  <h2>Register Map Datasheets</h2>
+  {render_register_index(modules)}
   <h2>Datasheets</h2>
   {render_datasheet_browser(modules)}
 </main>
