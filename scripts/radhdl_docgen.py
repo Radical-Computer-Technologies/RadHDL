@@ -436,11 +436,13 @@ def access_description(access: str) -> str:
 
 def describe_register(register: dict[str, Any], region_name: str) -> str:
     explicit = str(register.get("description", "") or "").strip()
-    if explicit:
-        return explicit
     raw_name = str(register.get("name", "register")).split(".")[-1]
     friendly = raw_name.replace("_", " ").strip()
     lower = raw_name.lower()
+    if explicit:
+        if parse_bit_fields(explicit) and any(token in lower for token in ("control", "ctrl", "cfg", "config")):
+            return "Control register used to configure and control this block."
+        return explicit
     if "scratch" in lower:
         return "Software scratch register reserved for driver diagnostics and register-path validation."
     if lower == "magic":
@@ -462,6 +464,7 @@ def describe_register(register: dict[str, Any], region_name: str) -> str:
 
 def register_from_json(register: dict[str, Any], region_name: str, region_base: Any, default_width: int) -> RegisterDoc:
     description = describe_register(register, region_name)
+    field_source = str(register.get("description", "") or description)
     width_value = register.get("width", default_width)
     try:
         width = int(width_value)
@@ -482,7 +485,7 @@ def register_from_json(register: dict[str, Any], region_name: str, region_base: 
         width=width,
         region=region_name,
         description=description,
-        fields=parse_bit_fields(description),
+        fields=parse_bit_fields(field_source),
     )
 
 
@@ -712,9 +715,15 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .reg-field.reserved {{ color: var(--muted); background: var(--reserved); }}
 .field-table td:first-child {{ font-weight: 700; white-space: nowrap; }}
 .status {{ border-left: 4px solid #d59b35; background: var(--panel); padding: 10px 12px; margin: 10px 0; }}
-.wave {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); }}
+.testbench-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
+.testbench-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; }}
+.testbench-body {{ padding: 0 12px 12px; }}
+.wave {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); margin: 12px 0; --wave-zoom: 1; }}
 .wave h4 {{ margin: 0 0 8px; }}
-.wave svg {{ display: block; min-width: 980px; width: 100%; height: auto; }}
+.wave-controls {{ display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--muted); font-size: 13px; }}
+.wave-controls input {{ width: 180px; accent-color: var(--accent); }}
+.wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
+.wave svg {{ display: block; width: calc(1120px * var(--wave-zoom)); max-width: none; height: auto; }}
 .wave-axis {{ stroke: var(--line); stroke-width: 1; }}
 .wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
 .wave-label {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
@@ -722,7 +731,12 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave-trace {{ fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }}
 .wave-bus {{ fill: rgba(98, 214, 199, .12); stroke: var(--accent); stroke-width: 1.2; }}
 .wave-bus-text {{ fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.wave-interface {{ fill: rgba(139, 211, 255, .13); stroke: #8bd3ff; stroke-width: 1.2; }}
+.wave-interface-text {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }}
 .wave-unknown {{ stroke: #d59b35; }}
+.wave-group {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 10px 0; }}
+.wave-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
+.wave-group-body {{ padding: 0 10px 10px; }}
 nav.breadcrumb {{ font-size: 13px; color: var(--muted); margin-bottom: 14px; }}
 footer {{ margin-top: 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }}
 """.strip()
@@ -743,6 +757,13 @@ def page(title: str, body: str, depth: int = 0) -> str:
 </head>
 <body>
 {body}
+<script>
+document.addEventListener('input', function (event) {{
+  if (!event.target.classList || !event.target.classList.contains('wave-zoom')) return;
+  var wave = event.target.closest('.wave');
+  if (wave) wave.style.setProperty('--wave-zoom', String(Number(event.target.value) / 100));
+}});
+</script>
 </body>
 </html>
 """
@@ -1268,8 +1289,40 @@ def render_bus_wave(samples: list[tuple[int, str]], end_time: int, x0: int, widt
     return "".join(elements)
 
 
-def render_waveform_svg(signals: list[dict[str, Any]], title: str, note: str = "") -> str:
-    selected = [signal for signal in signals if signal.get("samples")][:16]
+def wave_interface_key(name: str) -> str:
+    upper = re.sub(r"\[[^\]]+\]$", "", name.upper())
+    patterns = [
+        r"^([SM]_AXIS)(?:_|$)",
+        r"^([SM]_AXI(?:4|_LITE|LITE)?)(?:_|$)",
+        r"^(M_AXI|S_AXI)(?:_|$)",
+        r"^(QSPI|I2C|SPI|SMI)(?:_|$)",
+    ]
+    for pattern in patterns:
+        match = re.match(pattern, upper)
+        if match:
+            return match.group(1).replace("AXILITE", "AXI_LITE")
+    return ""
+
+
+def group_wave_signals(signals: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    overview: list[dict[str, Any]] = []
+    for signal in signals:
+        key = wave_interface_key(str(signal.get("name", "")))
+        if key:
+            groups.setdefault(key, []).append(signal)
+        else:
+            overview.append(signal)
+    for key, members in groups.items():
+        summary_samples = []
+        for member in members:
+            summary_samples.extend(member.get("samples", []))
+        overview.append({"name": key, "kind": "interface", "count": len(members), "samples": compact_wave_samples(summary_samples, 96)})
+    return overview, groups
+
+
+def render_waveform_svg(signals: list[dict[str, Any]], title: str, source: str = "", max_signals: int = 96) -> str:
+    selected = [signal for signal in signals if signal.get("samples")][:max_signals]
     if not selected:
         return ""
     end_time = max((time for signal in selected for time, _ in signal["samples"]), default=1)
@@ -1295,28 +1348,50 @@ def render_waveform_svg(signals: list[dict[str, Any]], title: str, note: str = "
         rows.append(f'<text class="wave-label" x="8" y="{row_y + 18}">{html.escape(label)}</text>')
         rows.append(f'<line class="wave-axis" x1="{label_width}" y1="{trace_y + trace_height}" x2="{label_width + plot_width}" y2="{trace_y + trace_height}" />')
         samples = signal["samples"]
-        if is_scalar_wave(samples):
+        if signal.get("kind") == "interface":
+            rows.append(f'<rect class="wave-interface" x="{label_width}" y="{trace_y - 1}" width="{plot_width}" height="{trace_height + 2}" rx="4" />')
+            rows.append(
+                f'<text class="wave-interface-text" x="{label_width + 8}" y="{trace_y + 12}">'
+                f'{html.escape(label)} interface ({int(signal.get("count", 0))} signals)</text>'
+            )
+        elif is_scalar_wave(samples):
             path, unknown = scalar_wave_path(samples, end_time, label_width, plot_width, trace_y, trace_height)
             if path:
                 css = "wave-trace wave-unknown" if unknown else "wave-trace"
                 rows.append(f'<path class="{css}" d="{path}" />')
         else:
             rows.append(render_bus_wave(samples, end_time, label_width, plot_width, trace_y, trace_height))
-    note_html = f'<p class="meta">{html.escape(note)}</p>' if note else ""
+    source_html = f'<p class="meta">Source: {html.escape(source)}</p>' if source else ""
     return (
         '<div class="wave">'
         f"<h4>{html.escape(title)}</h4>"
-        f"{note_html}"
+        f"{source_html}"
+        '<div class="wave-controls"><label>Zoom <input class="wave-zoom" type="range" min="80" max="320" value="100"></label></div>'
+        '<div class="wave-viewport">'
         f'<svg class="waveform" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
         + "".join(grid)
         + "".join(rows)
-        + "</svg></div>"
+        + "</svg></div></div>"
     )
 
 
-def render_vcd_preview(vcd_path: Path) -> str:
+def render_waveform_viewer(signals: list[dict[str, Any]], title: str, source: str) -> str:
+    overview, groups = group_wave_signals(signals)
+    parts = [render_waveform_svg(overview, title, source)]
+    for key in sorted(groups):
+        parts.append(
+            '<details class="wave-group">'
+            f"<summary>{html.escape(key)} interface signals</summary>"
+            '<div class="wave-group-body">'
+            + render_waveform_svg(groups[key], f"{key} Interface Waveform", source)
+            + "</div></details>"
+        )
+    return "".join(parts)
+
+
+def vcd_wave_signals(vcd_path: Path) -> list[dict[str, Any]]:
     if not vcd_path.exists():
-        return ""
+        return []
     signals: dict[str, str] = {}
     samples: dict[str, list[tuple[int, str]]] = {}
     current_time = 0
@@ -1340,18 +1415,22 @@ def render_vcd_preview(vcd_path: Path) -> str:
                 value = value[1:]
             else:
                 value, code = line[0], line[1:]
-            if code in samples and len(samples[code]) < 256:
+            if code in samples and len(samples[code]) < 768:
                 samples[code].append((current_time, value))
     wave_signals = []
     seen_names: set[str] = set()
-    for code, name in list(signals.items())[:16]:
+    for code, name in signals.items():
         if name in seen_names:
             continue
         seen_names.add(name)
         signal_samples = compact_wave_samples(samples.get(code, []))
         if signal_samples:
             wave_signals.append({"name": name, "samples": signal_samples})
-    return render_waveform_svg(wave_signals, "Captured GHDL Waveform", f"Source: {vcd_path.name}")
+    return wave_signals
+
+
+def render_vcd_preview(vcd_path: Path, source: str) -> str:
+    return render_waveform_viewer(vcd_wave_signals(vcd_path), "Captured GHDL Waveform", source)
 
 
 def portable_timing_samples(name: str, data_type: str, index: int) -> list[tuple[int, str]]:
@@ -1377,7 +1456,7 @@ def portable_timing_samples(name: str, data_type: str, index: int) -> list[tuple
     return [(0, "0"), (36 + index * 2, "1"), (88 + index * 2, "0")]
 
 
-def render_port_waveform_sketch(module: ModuleDoc, reason: str) -> str:
+def render_port_waveform_sketch(module: ModuleDoc, source: str) -> str:
     ports = ordered_ports_for_docs(module.ports)
     prioritized = sorted(
         ports,
@@ -1392,9 +1471,9 @@ def render_port_waveform_sketch(module: ModuleDoc, reason: str) -> str:
     )
     signals = [
         {"name": port.name, "samples": portable_timing_samples(port.name, port.data_type, index)}
-        for index, port in enumerate(prioritized[:12])
+        for index, port in enumerate(prioritized)
     ]
-    return render_waveform_svg(signals, "Portable Timing Sketch", reason)
+    return render_waveform_viewer(signals, "Interface Timing Diagram", source)
 
 
 def imported_libraries(text: str) -> set[str]:
@@ -1569,11 +1648,10 @@ def render_testbenches(
     stop_time: str,
     sim_cache: dict[str, dict[str, Any]],
 ) -> str:
-    parts = ["<h2>Testbenches and Waveforms</h2>"]
+    parts = ["<h2>Testbenches</h2>"]
     if not module.testbenches:
         parts.append('<p class="summary">No directly associated testbench was found.</p>')
         return "".join(parts)
-    rows = []
     for bench in module.testbenches:
         status = bench.simulation
         if run_sims:
@@ -1590,32 +1668,21 @@ def render_testbenches(
         if status.get("vcd"):
             vcd_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / f"{module_slug(bench.name)}.vcd"
             artifact_links.append(f'<a href="{html.escape(str(vcd_path))}">vcd</a>')
-        rows.append(
-            f"<tr><td>{html.escape(bench.name)}</td><td>{html.escape(bench.path)}</td>"
-            f"<td>{html.escape(state)}</td><td>{', '.join(artifact_links) or ''}</td></tr>"
-        )
-        if state == "skipped":
-            parts.append(f'<div class="status">{html.escape(bench.name)} simulation skipped: {html.escape(status.get("reason", ""))}</div>')
-        if state == "failed":
-            reason = (status.get("stderr") or status.get("stdout") or "").strip().splitlines()
-            if not reason and status.get("analysis_skipped"):
-                reason = [json.dumps(status["analysis_skipped"])[:300]]
-            message = reason[0] if reason else "GHDL simulation failed; see status JSON for details."
-            parts.append(f'<div class="status">{html.escape(bench.name)} simulation failed: {html.escape(message)}</div>')
         if status.get("vcd"):
-            parts.append(render_vcd_preview(out / status["vcd"]))
+            waveform = render_vcd_preview(out / status["vcd"], bench.path)
         else:
-            if state in {"failed", "skipped"}:
-                reason = f"{bench.name} did not produce a portable VCD artifact; sketch generated from declared ports."
-            else:
-                reason = f"{bench.name} has not been simulated in this documentation build; sketch generated from declared ports."
-            parts.append(render_port_waveform_sketch(module, reason))
-    parts.insert(
-        1,
-        "<table><thead><tr><th>Testbench</th><th>Source</th><th>Simulation</th><th>Artifacts</th></tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody></table>",
-    )
+            waveform = render_port_waveform_sketch(module, bench.path)
+        artifact_html = f'<p class="meta">Artifacts: {", ".join(artifact_links)}</p>' if artifact_links else ""
+        status_label = "captured waveform" if status.get("vcd") else "interface timing diagram"
+        parts.append(
+            '<details class="testbench-section">'
+            f'<summary>{html.escape(bench.name)} <span class="meta">{html.escape(status_label)}</span></summary>'
+            '<div class="testbench-body">'
+            f'<p class="meta">Source: {html.escape(bench.path)}</p>'
+            f"{artifact_html}"
+            f"{waveform}"
+            "</div></details>"
+        )
     return "".join(parts)
 
 
