@@ -375,8 +375,52 @@ def parse_bit_fields(description: str) -> list[dict[str, Any]]:
             lsb = int(match.group(2))
         if lsb > msb:
             msb, lsb = lsb, msb
-        fields.append({"name": match.group(4).strip(), "msb": msb, "lsb": lsb})
+        name = match.group(4).strip()
+        fields.append({"name": name, "display_name": field_display_name(name), "description": field_description(name), "msb": msb, "lsb": lsb})
     return fields
+
+
+def field_display_name(name: str) -> str:
+    words = re.sub(r"[_-]+", " ", name).upper().split()
+    replacements = {
+        "ENABLE": "EN",
+        "ENABLED": "EN",
+        "CIRCULAR": "CIRC",
+        "COMMAND": "CMD",
+        "CONFIGURATION": "CFG",
+        "INTERRUPT": "IRQ",
+        "RESERVED": "RSVD",
+        "STATUS": "STAT",
+    }
+    return " ".join(replacements.get(word, word) for word in words)
+
+
+def field_description(name: str) -> str:
+    clean = re.sub(r"[_-]+", " ", name).strip()
+    upper = clean.upper()
+    if "MM2S" in upper and "ENABLE" in upper:
+        return "Enables MM2S transfer(s)."
+    if "S2MM" in upper and "ENABLE" in upper:
+        return "Enables S2MM transfer(s)."
+    if "MM2S" in upper and "CIRC" in upper:
+        return "Enables MM2S circular address wrapping."
+    if "S2MM" in upper and "CIRC" in upper:
+        return "Enables S2MM circular address wrapping."
+    if "START" in upper:
+        return "Starts the selected operation."
+    if "DONE" in upper:
+        return "Indicates that the selected operation completed."
+    if "BUSY" in upper:
+        return "Indicates that the block is actively processing."
+    if "ERROR" in upper:
+        return "Indicates that the block detected an error condition."
+    if "CLEAR" in upper:
+        return "Clears the associated sticky status flag(s)."
+    if "IRQ" in upper or "INTERRUPT" in upper:
+        return "Enables interrupt generation for the associated event."
+    if "MODE" in upper:
+        return "Selects the operating mode."
+    return clean[:1].upper() + clean[1:] + "."
 
 
 def access_description(access: str) -> str:
@@ -660,12 +704,25 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .reg-card {{ border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 12px 0; background: var(--card); }}
 .reg-card h4 {{ margin: 0 0 6px; }}
 .reg-meta {{ color: var(--muted); font-size: 13px; margin-bottom: 8px; }}
-.reg-ruler, .reg-bits {{ display: grid; grid-template-columns: repeat(32, minmax(18px, 1fr)); }}
+.reg-slice {{ margin: 10px 0 14px; overflow-x: auto; }}
+.reg-slice-title {{ color: var(--muted); font-size: 13px; font-weight: 700; margin: 0 0 4px; text-transform: uppercase; }}
+.reg-ruler, .reg-bits {{ display: grid; min-width: 768px; }}
 .reg-ruler span {{ font-size: 10px; color: var(--muted); text-align: center; border: 1px solid var(--line); border-bottom: 0; padding: 2px 0; background: var(--ruler); }}
-.reg-field {{ min-height: 38px; border: 1px solid var(--line); padding: 4px 6px; font-size: 12px; background: var(--soft); overflow-wrap: anywhere; }}
+.reg-field {{ min-height: 46px; border: 1px solid var(--line); padding: 5px 6px; font-size: 12px; line-height: 1.15; text-align: center; background: var(--soft); overflow-wrap: anywhere; display: flex; align-items: center; justify-content: center; }}
 .reg-field.reserved {{ color: var(--muted); background: var(--reserved); }}
+.field-table td:first-child {{ font-weight: 700; white-space: nowrap; }}
 .status {{ border-left: 4px solid #d59b35; background: var(--panel); padding: 10px 12px; margin: 10px 0; }}
 .wave {{ width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); }}
+.wave h4 {{ margin: 0 0 8px; }}
+.wave svg {{ display: block; min-width: 980px; width: 100%; height: auto; }}
+.wave-axis {{ stroke: var(--line); stroke-width: 1; }}
+.wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
+.wave-label {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.wave-time {{ fill: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.wave-trace {{ fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }}
+.wave-bus {{ fill: rgba(98, 214, 199, .12); stroke: var(--accent); stroke-width: 1.2; }}
+.wave-bus-text {{ fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.wave-unknown {{ stroke: #d59b35; }}
 nav.breadcrumb {{ font-size: 13px; color: var(--muted); margin-bottom: 14px; }}
 footer {{ margin-top: 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }}
 """.strip()
@@ -880,37 +937,100 @@ def register_segments(register: RegisterDoc) -> list[dict[str, Any]]:
         msb = min(width - 1, int(field_doc["msb"]))
         lsb = max(0, int(field_doc["lsb"]))
         if msb >= lsb:
-            fields.append({"name": str(field_doc["name"]), "msb": msb, "lsb": lsb, "reserved": False})
+            fields.append(
+                {
+                    "name": str(field_doc.get("display_name") or field_doc["name"]),
+                    "full_name": str(field_doc["name"]),
+                    "description": str(field_doc.get("description") or field_description(str(field_doc["name"]))),
+                    "msb": msb,
+                    "lsb": lsb,
+                    "reserved": False,
+                }
+            )
     if not fields:
-        return [{"name": "value", "msb": width - 1, "lsb": 0, "reserved": False}]
+        return [{"name": "VALUE", "full_name": "value", "description": "Full register value.", "msb": width - 1, "lsb": 0, "reserved": False}]
     fields.sort(key=lambda item: item["msb"], reverse=True)
     segments: list[dict[str, Any]] = []
     cursor = width - 1
     for field_doc in fields:
         if field_doc["msb"] < cursor:
-            segments.append({"name": "reserved", "msb": cursor, "lsb": field_doc["msb"] + 1, "reserved": True})
+            segments.append({"name": "RSVD", "msb": cursor, "lsb": field_doc["msb"] + 1, "reserved": True})
         segments.append(field_doc)
         cursor = field_doc["lsb"] - 1
     if cursor >= 0:
-        segments.append({"name": "reserved", "msb": cursor, "lsb": 0, "reserved": True})
+        segments.append({"name": "RSVD", "msb": cursor, "lsb": 0, "reserved": True})
     return segments
 
 
-def render_register_block(register: RegisterDoc) -> str:
-    width = max(1, min(register.width or 32, 64))
-    ruler = "".join(f"<span>{bit}</span>" for bit in range(width - 1, -1, -1))
+def display_register_name(name: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_\s-]+", name) if part)
+
+
+def compact_hex(value: str) -> str:
+    parsed = int_value(value)
+    if parsed is None:
+        return value
+    width = 4 if parsed >= 0x1000 else 2
+    return f"0x{parsed:0{width}X}"
+
+
+def bit_ref(register: RegisterDoc, segment: dict[str, Any]) -> str:
+    name = display_register_name(register.name)
+    msb = int(segment["msb"])
+    lsb = int(segment["lsb"])
+    return f"{name}[{msb}]" if msb == lsb else f"{name}[{msb}:{lsb}]"
+
+
+def render_register_slice(register: RegisterDoc, high: int, low: int) -> str:
+    slice_width = high - low + 1
+    ruler = "".join(f"<span>{bit}</span>" for bit in range(high, low - 1, -1))
     fields = []
     for segment in register_segments(register):
-        msb = int(segment["msb"])
-        lsb = int(segment["lsb"])
+        msb = min(high, int(segment["msb"]))
+        lsb = max(low, int(segment["lsb"]))
+        if msb < lsb:
+            continue
         span = msb - lsb + 1
-        start = width - msb
+        start = high - msb + 1
         label = segment["name"] if msb == lsb else f"{segment['name']} [{msb}:{lsb}]"
         css = "reg-field reserved" if segment.get("reserved") else "reg-field"
         fields.append(f'<div class="{css}" style="grid-column: {start} / span {span};">{html.escape(label)}</div>')
     return (
-        f'<div class="reg-ruler" style="grid-template-columns: repeat({width}, minmax(18px, 1fr));">{ruler}</div>'
-        f'<div class="reg-bits" style="grid-template-columns: repeat({width}, minmax(18px, 1fr));">{"".join(fields)}</div>'
+        '<div class="reg-slice">'
+        f'<div class="reg-slice-title">{html.escape(display_register_name(register.name))}[{high}:{low}]</div>'
+        f'<div class="reg-ruler" style="grid-template-columns: repeat({slice_width}, minmax(48px, 1fr));">{ruler}</div>'
+        f'<div class="reg-bits" style="grid-template-columns: repeat({slice_width}, minmax(48px, 1fr));">{"".join(fields)}</div>'
+        "</div>"
+    )
+
+
+def render_register_block(register: RegisterDoc) -> str:
+    width = max(1, min(register.width or 32, 64))
+    chunks = []
+    for low in range(0, width, 16):
+        high = min(width - 1, low + 15)
+        chunks.append(render_register_slice(register, high, low))
+    return "".join(chunks)
+
+
+def render_register_field_table(register: RegisterDoc) -> str:
+    rows = []
+    for segment in register_segments(register):
+        if segment.get("reserved"):
+            continue
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(segment['name']))}</td>"
+            f"<td>{html.escape(bit_ref(register, segment))}</td>"
+            f"<td>{html.escape(str(segment.get('description', '')))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        '<table class="field-table"><thead><tr><th>Name</th><th>Register bit(s)</th><th>Description</th></tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
     )
 
 
@@ -920,7 +1040,7 @@ def render_register_maps(module: ModuleDoc) -> str:
     parts = ["<h2>Register Maps</h2>"]
     for regmap in module.register_maps:
         parts.append(f"<h3>{html.escape(regmap.name)}</h3>")
-        parts.append(f'<p class="meta">Source: {html.escape(regmap.path)} Base: {html.escape(regmap.base)}</p>')
+        parts.append(f'<p class="meta">Source: {html.escape(regmap.path)}</p>')
         parts.append(paragraph(regmap.description))
         if not regmap.registers:
             parts.append('<p class="summary">No registers declared in this map.</p>')
@@ -930,15 +1050,14 @@ def render_register_maps(module: ModuleDoc) -> str:
             rows.append(
                 "<tr>"
                 f"<td>{html.escape(register.name)}</td>"
-                f"<td>{html.escape(register.address)}</td>"
-                f"<td>{html.escape(register.offset)}</td>"
+                f"<td>{html.escape(compact_hex(register.offset))}</td>"
                 f"<td>{html.escape(register.access)}</td>"
                 f"<td>{html.escape(register.reset)}</td>"
                 f"<td>{html.escape(register.description)}</td>"
                 "</tr>"
             )
         parts.append(
-            "<table><thead><tr><th>Register</th><th>Address</th><th>Offset</th><th>Access</th><th>Reset</th><th>Description</th></tr></thead><tbody>"
+            "<table><thead><tr><th>Register</th><th>Offset</th><th>Access</th><th>Reset</th><th>Description</th></tr></thead><tbody>"
             + "".join(rows)
             + "</tbody></table>"
         )
@@ -946,8 +1065,7 @@ def render_register_maps(module: ModuleDoc) -> str:
             meta_items = [
                 item
                 for item in [
-                    f"Address {register.address}" if register.address else "",
-                    f"Offset {register.offset}" if register.offset else "",
+                    f"Offset {compact_hex(register.offset)}" if register.offset else "",
                     f"Access {register.access}" if register.access else "",
                     f"Reset {register.reset}" if register.reset else "",
                 ]
@@ -959,6 +1077,7 @@ def render_register_maps(module: ModuleDoc) -> str:
                 f'<div class="reg-meta">{html.escape(" / ".join(meta_items))}</div>'
                 + paragraph(register.description)
                 + render_register_block(register)
+                + render_register_field_table(register)
                 + "</div>"
             )
     return "".join(parts)
@@ -1058,6 +1177,143 @@ def render_integration_template(module: ModuleDoc) -> str:
     return detail_section("VHDL Include And Instantiation Template", content)
 
 
+def normalize_wave_value(value: str) -> str:
+    return value.strip().replace("_", "")
+
+
+def is_scalar_wave(samples: list[tuple[int, str]]) -> bool:
+    return all(len(normalize_wave_value(value)) == 1 for _, value in samples)
+
+
+def wave_y(value: str, high_y: float, low_y: float) -> float:
+    normalized = normalize_wave_value(value).lower()
+    if normalized == "1":
+        return high_y
+    if normalized == "0":
+        return low_y
+    return (high_y + low_y) / 2
+
+
+def wave_x(time_value: int, end_time: int, x0: int, width: int) -> float:
+    if end_time <= 0:
+        return float(x0)
+    return x0 + (max(0, min(time_value, end_time)) / end_time) * width
+
+
+def format_wave_value(value: str) -> str:
+    normalized = normalize_wave_value(value)
+    if not normalized:
+        return ""
+    if len(normalized) > 8 and set(normalized.lower()) <= {"0", "1"}:
+        return f"0x{int(normalized, 2):X}"
+    if len(normalized) > 18:
+        return normalized[:15] + "..."
+    return normalized.upper()
+
+
+def compact_wave_samples(samples: list[tuple[int, str]], limit: int = 72) -> list[tuple[int, str]]:
+    compacted: list[tuple[int, str]] = []
+    previous: tuple[int, str] | None = None
+    for time_value, value in sorted(samples, key=lambda item: item[0]):
+        value = normalize_wave_value(value)
+        if previous and previous[0] == time_value:
+            compacted[-1] = (time_value, value)
+        elif not previous or previous[1] != value:
+            compacted.append((time_value, value))
+        previous = (time_value, value)
+        if len(compacted) >= limit:
+            break
+    return compacted
+
+
+def scalar_wave_path(samples: list[tuple[int, str]], end_time: int, x0: int, width: int, y0: int, height: int) -> tuple[str, bool]:
+    samples = compact_wave_samples(samples)
+    if not samples:
+        return "", False
+    high_y = y0
+    low_y = y0 + height
+    path: list[str] = []
+    unknown = False
+    first_time, first_value = samples[0]
+    current_x = wave_x(first_time, end_time, x0, width)
+    current_y = wave_y(first_value, high_y, low_y)
+    unknown = unknown or normalize_wave_value(first_value).lower() not in {"0", "1"}
+    path.append(f"M {current_x:.1f} {current_y:.1f}")
+    for time_value, value in samples[1:]:
+        next_x = wave_x(time_value, end_time, x0, width)
+        next_y = wave_y(value, high_y, low_y)
+        path.append(f"L {next_x:.1f} {current_y:.1f}")
+        path.append(f"L {next_x:.1f} {next_y:.1f}")
+        current_x = next_x
+        current_y = next_y
+        unknown = unknown or normalize_wave_value(value).lower() not in {"0", "1"}
+    path.append(f"L {wave_x(end_time, end_time, x0, width):.1f} {current_y:.1f}")
+    return " ".join(path), unknown
+
+
+def render_bus_wave(samples: list[tuple[int, str]], end_time: int, x0: int, width: int, y0: int, height: int) -> str:
+    samples = compact_wave_samples(samples)
+    if not samples:
+        return ""
+    elements = []
+    mid_y = y0 + height / 2
+    for index, (time_value, value) in enumerate(samples):
+        next_time = samples[index + 1][0] if index + 1 < len(samples) else end_time
+        x1 = wave_x(time_value, end_time, x0, width)
+        x2 = max(x1 + 4, wave_x(next_time, end_time, x0, width))
+        label = format_wave_value(value)
+        elements.append(f'<rect class="wave-bus" x="{x1:.1f}" y="{y0}" width="{max(4, x2 - x1):.1f}" height="{height}" rx="3" />')
+        if x2 - x1 >= 34 and label:
+            elements.append(f'<text class="wave-bus-text" x="{x1 + 5:.1f}" y="{mid_y + 4:.1f}">{html.escape(label)}</text>')
+    return "".join(elements)
+
+
+def render_waveform_svg(signals: list[dict[str, Any]], title: str, note: str = "") -> str:
+    selected = [signal for signal in signals if signal.get("samples")][:16]
+    if not selected:
+        return ""
+    end_time = max((time for signal in selected for time, _ in signal["samples"]), default=1)
+    end_time = max(1, end_time)
+    width = 1120
+    label_width = 190
+    plot_width = width - label_width - 36
+    top = 34
+    row_height = 34
+    trace_height = 16
+    height = top + len(selected) * row_height + 28
+    grid = []
+    for fraction in (0, 0.25, 0.5, 0.75, 1):
+        x = label_width + fraction * plot_width
+        time_label = int(end_time * fraction)
+        grid.append(f'<line class="wave-grid" x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />')
+        grid.append(f'<text class="wave-time" x="{x + 3:.1f}" y="15">{time_label}</text>')
+    rows = []
+    for index, signal in enumerate(selected):
+        row_y = top + index * row_height
+        trace_y = row_y + 4
+        label = str(signal["name"])
+        rows.append(f'<text class="wave-label" x="8" y="{row_y + 18}">{html.escape(label)}</text>')
+        rows.append(f'<line class="wave-axis" x1="{label_width}" y1="{trace_y + trace_height}" x2="{label_width + plot_width}" y2="{trace_y + trace_height}" />')
+        samples = signal["samples"]
+        if is_scalar_wave(samples):
+            path, unknown = scalar_wave_path(samples, end_time, label_width, plot_width, trace_y, trace_height)
+            if path:
+                css = "wave-trace wave-unknown" if unknown else "wave-trace"
+                rows.append(f'<path class="{css}" d="{path}" />')
+        else:
+            rows.append(render_bus_wave(samples, end_time, label_width, plot_width, trace_y, trace_height))
+    note_html = f'<p class="meta">{html.escape(note)}</p>' if note else ""
+    return (
+        '<div class="wave">'
+        f"<h4>{html.escape(title)}</h4>"
+        f"{note_html}"
+        f'<svg class="waveform" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
+        + "".join(grid)
+        + "".join(rows)
+        + "</svg></div>"
+    )
+
+
 def render_vcd_preview(vcd_path: Path) -> str:
     if not vcd_path.exists():
         return ""
@@ -1084,19 +1340,61 @@ def render_vcd_preview(vcd_path: Path) -> str:
                 value = value[1:]
             else:
                 value, code = line[0], line[1:]
-            if code in samples and len(samples[code]) < 32:
+            if code in samples and len(samples[code]) < 256:
                 samples[code].append((current_time, value))
-    rows = []
+    wave_signals = []
     seen_names: set[str] = set()
     for code, name in list(signals.items())[:16]:
         if name in seen_names:
             continue
         seen_names.add(name)
-        values = " | ".join(f"{time}:{value}" for time, value in samples.get(code, [])[:16])
-        rows.append(f"<tr><td>{html.escape(name)}</td><td>{html.escape(values)}</td></tr>")
-    if not rows:
-        return ""
-    return '<div class="wave"><table><thead><tr><th>Signal</th><th>Samples</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
+        signal_samples = compact_wave_samples(samples.get(code, []))
+        if signal_samples:
+            wave_signals.append({"name": name, "samples": signal_samples})
+    return render_waveform_svg(wave_signals, "Captured GHDL Waveform", f"Source: {vcd_path.name}")
+
+
+def portable_timing_samples(name: str, data_type: str, index: int) -> list[tuple[int, str]]:
+    lowered = name.lower()
+    active_low = lowered.endswith("_n") or lowered.endswith("n") or "aresetn" in lowered
+    if "clk" in lowered or "clock" in lowered:
+        samples = []
+        value = "0"
+        for time_value in range(0, 121, 5):
+            samples.append((time_value, value))
+            value = "1" if value == "0" else "0"
+        return samples
+    if "rst" in lowered or "reset" in lowered:
+        return [(0, "0" if active_low else "1"), (18, "1" if active_low else "0")]
+    if any(token in lowered for token in ("valid", "ready", "enable", "start")):
+        base = 22 + index * 3
+        return [(0, "0"), (base, "1"), (base + 48, "0"), (base + 74, "1")]
+    if any(token in lowered for token in ("done", "last", "irq")):
+        base = 76 + index * 2
+        return [(0, "0"), (base, "1"), (base + 12, "0")]
+    if any(token in lowered for token in ("data", "addr", "count", "len", "tdata")) or "vector" in data_type.lower():
+        return [(0, "0" * 8), (24, "00010010"), (54, "10100101"), (92, "00111100")]
+    return [(0, "0"), (36 + index * 2, "1"), (88 + index * 2, "0")]
+
+
+def render_port_waveform_sketch(module: ModuleDoc, reason: str) -> str:
+    ports = ordered_ports_for_docs(module.ports)
+    prioritized = sorted(
+        ports,
+        key=lambda port: (
+            0 if re.search(r"clk|clock", port.name, re.IGNORECASE) else
+            1 if re.search(r"rst|reset", port.name, re.IGNORECASE) else
+            2 if re.search(r"valid|ready|enable|start|done|last|irq", port.name, re.IGNORECASE) else
+            3 if re.search(r"data|addr|count|len|tdata", port.name, re.IGNORECASE) else
+            4,
+            port.name,
+        ),
+    )
+    signals = [
+        {"name": port.name, "samples": portable_timing_samples(port.name, port.data_type, index)}
+        for index, port in enumerate(prioritized[:12])
+    ]
+    return render_waveform_svg(signals, "Portable Timing Sketch", reason)
 
 
 def imported_libraries(text: str) -> set[str]:
@@ -1306,6 +1604,12 @@ def render_testbenches(
             parts.append(f'<div class="status">{html.escape(bench.name)} simulation failed: {html.escape(message)}</div>')
         if status.get("vcd"):
             parts.append(render_vcd_preview(out / status["vcd"]))
+        else:
+            if state in {"failed", "skipped"}:
+                reason = f"{bench.name} did not produce a portable VCD artifact; sketch generated from declared ports."
+            else:
+                reason = f"{bench.name} has not been simulated in this documentation build; sketch generated from declared ports."
+            parts.append(render_port_waveform_sketch(module, reason))
     parts.insert(
         1,
         "<table><thead><tr><th>Testbench</th><th>Source</th><th>Simulation</th><th>Artifacts</th></tr></thead><tbody>"
