@@ -463,6 +463,7 @@ def load_register_maps(root: Path) -> list[RegisterMapDoc]:
         for register in data.get("registers", []) or []:
             if isinstance(register, dict):
                 flat_registers.setdefault(str(register.get("region", "")), []).append(register)
+        maps_by_region: dict[str, RegisterMapDoc] = {}
         for region in regions:
             if not isinstance(region, dict):
                 continue
@@ -473,14 +474,51 @@ def load_register_maps(root: Path) -> list[RegisterMapDoc]:
                 if not isinstance(register, dict):
                     continue
                 registers.append(register_from_json(register, region_name, region.get("base", ""), default_width))
+            regmap = RegisterMapDoc(
+                name=region_name,
+                path=rel_path(path, root),
+                base=hex_string(region.get("base", "")),
+                description=str(region.get("description") or data.get("description") or ""),
+                data_width=default_width,
+                registers=registers,
+            )
+            maps.append(regmap)
+            maps_by_region[region_name] = regmap
+        for accelerator in data.get("dsp_accelerators", []) or []:
+            if not isinstance(accelerator, dict) or not accelerator.get("block"):
+                continue
+            register_refs = accelerator.get("registers")
+            if not isinstance(register_refs, dict):
+                continue
+            selected: list[RegisterDoc] = []
+            selected_regions: list[RegisterMapDoc] = []
+            for ref in register_refs.values():
+                if not isinstance(ref, str) or "." not in ref:
+                    continue
+                region_name, register_name = ref.split(".", 1)
+                source_map = maps_by_region.get(region_name)
+                if not source_map:
+                    continue
+                if source_map not in selected_regions:
+                    selected_regions.append(source_map)
+                for register in source_map.registers:
+                    if register.name == register_name and register not in selected:
+                        selected.append(register)
+                        break
+            if not selected:
+                continue
+            base = selected_regions[0].base if len(selected_regions) == 1 else ""
             maps.append(
                 RegisterMapDoc(
-                    name=region_name,
+                    name=str(accelerator["block"]),
                     path=rel_path(path, root),
-                    base=hex_string(region.get("base", "")),
-                    description=str(region.get("description") or data.get("description") or ""),
+                    base=base,
+                    description=(
+                        f"Register subset used by accelerator {accelerator.get('name', accelerator['block'])} "
+                        f"({accelerator.get('type', 'unspecified type')}) in {data.get('name', path.stem)}."
+                    ),
                     data_width=default_width,
-                    registers=registers,
+                    registers=selected,
                 )
             )
     return maps
@@ -489,10 +527,12 @@ def load_register_maps(root: Path) -> list[RegisterMapDoc]:
 def attach_register_maps(modules: list[ModuleDoc], maps: list[RegisterMapDoc]) -> None:
     by_name = {module.name.lower(): module for module in modules}
     for regmap in maps:
-        haystack = f"{regmap.name} {regmap.path}".lower()
+        path_name = Path(regmap.path).name.lower()
+        path_stem = path_name.removesuffix(".map.json").removesuffix(".radlib.json")
+        exact_names = {regmap.name.lower(), path_stem}
         attached = False
         for name, module in by_name.items():
-            if name in haystack:
+            if name in exact_names:
                 module.register_maps.append(regmap)
                 attached = True
         if not attached:
@@ -910,16 +950,6 @@ def use_cases(module: ModuleDoc) -> list[str]:
     return cases
 
 
-def source_snippet(module: ModuleDoc, root: Path) -> str:
-    source = root / module.path
-    if not source.exists():
-        return ""
-    text = read_text(source)
-    entity_match = re.search(rf"entity\s+{re.escape(module.name)}\s+is.*?end(?:\s+entity)?(?:\s+{re.escape(module.name)})?\s*;", text, re.IGNORECASE | re.DOTALL)
-    snippet = entity_match.group(0) if entity_match else "\n".join(text.splitlines()[:80])
-    return f"<pre><code>{html.escape(snippet)}</code></pre>"
-
-
 def vhdl_include_template(module: ModuleDoc) -> str:
     library = module.library if module.library else "work"
     lines = [
@@ -942,6 +972,35 @@ def association_template(fields: list[FieldDoc], value_fn) -> str:
     return ",\n".join(f"    {field.name.ljust(width)} => {value_fn(field)}" for field in fields)
 
 
+def declaration_list(fields: list[FieldDoc], line_fn) -> list[str]:
+    lines: list[str] = []
+    for index, field in enumerate(fields):
+        suffix = ";" if index < len(fields) - 1 else ""
+        lines.append(f"    {line_fn(field)}{suffix}")
+    return lines
+
+
+def vhdl_component_template(module: ModuleDoc) -> str:
+    lines = [f"component {module.name} is"]
+    if module.generics:
+        lines.append("  generic (")
+        lines.extend(
+            declaration_list(
+                module.generics,
+                lambda field: f"{field.name} : {field.data_type}{f' := {field.default}' if field.default else ''}",
+            )
+        )
+        lines.append("  );")
+    if module.ports:
+        lines.append("  port (")
+        lines.extend(declaration_list(module.ports, lambda field: f"{field.name} : {field.direction} {field.data_type}"))
+        lines.append("  );")
+    else:
+        lines.append("  -- No ports declared.")
+    lines.append("end component;")
+    return "\n".join(lines)
+
+
 def vhdl_instantiation_template(module: ModuleDoc) -> str:
     generic_map = association_template(module.generics, lambda field: field.default or f"<{field.name.lower()}_value>")
     port_map = association_template(module.ports, lambda field: f"<{field.name.lower()}_signal>")
@@ -960,7 +1019,9 @@ def render_integration_template(module: ModuleDoc) -> str:
     content = (
         "<h3>File Header</h3>"
         f"<pre><code>{html.escape(vhdl_include_template(module))}</code></pre>"
-        "<h3>Instantiation</h3>"
+        "<h3>Component Declaration</h3>"
+        f"<pre><code>{html.escape(vhdl_component_template(module))}</code></pre>"
+        "<h3>Direct Entity Instantiation</h3>"
         f"<pre><code>{html.escape(vhdl_instantiation_template(module))}</code></pre>"
     )
     return detail_section("VHDL Include And Instantiation Template", content)
@@ -1253,8 +1314,6 @@ def render_module(
   {field_table("Ports", module.ports, include_direction=True)}
   {render_register_maps(module)}
   {render_testbenches(module, root, out, run_sims, strict, stop_time, sim_cache)}
-  <h2>HDL Example</h2>
-  {source_snippet(module, root)}
   <h2>Sources</h2>
   <ul>{''.join(f'<li>{html.escape(source)}</li>' for source in module.sources)}</ul>
 </main>
@@ -1381,7 +1440,7 @@ def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: li
   <div class="kicker">RadHDL Documentation</div>
   <h1>RadHDL Datasheets</h1>
   <div class="meta">Documentation version: {html.escape(version)}</div>
-  <p class="summary">Static HDL documentation for RadHDL modules. Datasheets include ports, generics, source snippets, register maps, testbench links, and optional GHDL waveform previews.</p>
+  <p class="summary">Static HDL documentation for RadHDL modules. Datasheets include ports, generics, instantiation templates, register maps, testbench links, and optional GHDL waveform previews.</p>
 </div></header>
 <main class="wrap">
   <h2>Catalog Summary</h2>

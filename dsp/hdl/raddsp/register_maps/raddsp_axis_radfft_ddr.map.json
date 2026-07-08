@@ -1,0 +1,174 @@
+{
+  "name": "raddsp_axis_radfft_ddr",
+  "description": "AXI4-Lite control and status register map for the DDR-backed RadFFT accelerator.",
+  "schema_version": 1,
+  "version": "0.1.0",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "raddsp_axis_radfft_ddr",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Software-visible control block for launching DDR-to-FFT, FFT-to-DDR, AXI-stream-to-DDR, and DDR-to-AXI-stream transfers.",
+      "registers": [
+        {
+          "name": "control",
+          "offset": "0x0000",
+          "access": "rw",
+          "description": "bit 0: start command; bits 5 downto 4: operation mode; bit 8: interrupt enable; bit 31: clear sticky status flags"
+        },
+        {
+          "name": "status",
+          "offset": "0x0004",
+          "access": "ro",
+          "description": "bit 0: busy; bit 1: done; bit 2: error; bit 3: unsupported configuration"
+        },
+        {
+          "name": "base_addr_lo",
+          "offset": "0x0008",
+          "access": "rw",
+          "description": "Low 32 bits of the primary DDR source/base address."
+        },
+        {
+          "name": "base_addr_hi",
+          "offset": "0x000C",
+          "access": "rw",
+          "description": "High address bits of the primary DDR source/base address when the configured AXI address width exceeds 32 bits."
+        },
+        {
+          "name": "out_addr_lo",
+          "offset": "0x0010",
+          "access": "rw",
+          "description": "Low 32 bits of the output DDR address. A zero value selects in-place output for supported operations."
+        },
+        {
+          "name": "out_addr_hi",
+          "offset": "0x0014",
+          "access": "rw",
+          "description": "High address bits of the output DDR address when the configured AXI address width exceeds 32 bits."
+        },
+        {
+          "name": "length_bytes",
+          "offset": "0x0018",
+          "access": "rw",
+          "description": "Transfer length in bytes. FFT operations require this to match the active frame size."
+        },
+        {
+          "name": "region_bytes",
+          "offset": "0x001C",
+          "access": "rw",
+          "description": "DDR region size used for range planning and default frame-region handling."
+        },
+        {
+          "name": "fft_points",
+          "offset": "0x0020",
+          "access": "rw",
+          "description": "bits 7 downto 0: log2 FFT point count; bits 23 downto 16: AXI bytes per beat on readback"
+        },
+        {
+          "name": "burst_beats",
+          "offset": "0x0024",
+          "access": "rw",
+          "description": "bits 7 downto 0: requested AXI burst length in beats, clamped internally to the configured maximum"
+        },
+        {
+          "name": "write_current",
+          "offset": "0x0028",
+          "access": "ro",
+          "description": "Current low 32-bit AXI write address for active or recently completed stream-to-DDR activity."
+        },
+        {
+          "name": "read_current",
+          "offset": "0x002C",
+          "access": "ro",
+          "description": "Current low 32-bit AXI read address for active or recently completed DDR-to-stream or FFT input activity."
+        },
+        {
+          "name": "twiddle_addr_lo",
+          "offset": "0x0030",
+          "access": "rw",
+          "description": "Low 32 bits of the DDR address containing FFT twiddle-table data."
+        },
+        {
+          "name": "twiddle_addr_hi",
+          "offset": "0x0034",
+          "access": "rw",
+          "description": "High address bits of the FFT twiddle-table DDR address when the configured AXI address width exceeds 32 bits."
+        },
+        {
+          "name": "fft_config",
+          "offset": "0x0038",
+          "access": "rw",
+          "description": "bit 0: radix-4 enable; bit 4: reserved radix mode; bit 5: reserved parallel mode; bit 6: cross-correlation mode; bits 10 downto 8: input width code; bits 14 downto 12: output width code; bits 17 downto 16: lane-count code"
+        },
+        {
+          "name": "magic",
+          "offset": "0x003C",
+          "access": "ro",
+          "description": "Read-only signature value 0x52464444 identifying the RadFFT DDR register block."
+        },
+        {
+          "name": "fft_limits",
+          "offset": "0x0040",
+          "access": "ro",
+          "description": "bits 7 downto 0: maximum log2 FFT points; bits 15 downto 8: maximum input width; bits 23 downto 16: maximum output width; bits 31 downto 24: twiddle width"
+        },
+        {
+          "name": "capabilities",
+          "offset": "0x0044",
+          "access": "ro",
+          "description": "bit 0: radix-2 support; bit 1: radix-4 support; bit 2: DDR FFT support; bit 3: cross-correlation support; bits 15 downto 8: maximum multiplier lanes; bits 23 downto 16: AXI bytes per beat; bits 31 downto 24: maximum burst beats"
+        },
+        {
+          "name": "batch_count",
+          "offset": "0x0048",
+          "access": "rw",
+          "description": "Number of frames to process. A written value of zero is coerced to one."
+        },
+        {
+          "name": "src_stride_bytes",
+          "offset": "0x004C",
+          "access": "rw",
+          "description": "Byte stride between source frames for batched FFT operation. Zero selects the active frame size."
+        },
+        {
+          "name": "dst_stride_bytes",
+          "offset": "0x0050",
+          "access": "rw",
+          "description": "Byte stride between destination frames for batched FFT operation. Zero selects the active frame size."
+        },
+        {
+          "name": "batch_done_count",
+          "offset": "0x0054",
+          "access": "ro",
+          "description": "Number of frames completed in the current or most recent batched operation."
+        },
+        {
+          "name": "corr_b_addr_lo",
+          "offset": "0x0058",
+          "access": "rw",
+          "description": "Low 32 bits of the secondary input address used by cross-correlation mode."
+        },
+        {
+          "name": "corr_b_addr_hi",
+          "offset": "0x005C",
+          "access": "rw",
+          "description": "High address bits of the secondary cross-correlation input address when the configured AXI address width exceeds 32 bits."
+        },
+        {
+          "name": "corr_scratch_addr_lo",
+          "offset": "0x0060",
+          "access": "rw",
+          "description": "Low 32 bits of the scratch/output workspace address used during cross-correlation processing."
+        },
+        {
+          "name": "corr_scratch_addr_hi",
+          "offset": "0x0064",
+          "access": "rw",
+          "description": "High address bits of the cross-correlation scratch workspace address when the configured AXI address width exceeds 32 bits."
+        }
+      ]
+    }
+  ]
+}
