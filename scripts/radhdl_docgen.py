@@ -531,7 +531,7 @@ def module_slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
 
 
-def package_group(module: ModuleDoc) -> str:
+def source_package_group(module: ModuleDoc) -> str:
     parts = module.path.split("/")
     if "iprepo" in parts:
         index = parts.index("iprepo")
@@ -543,8 +543,33 @@ def package_group(module: ModuleDoc) -> str:
     return module.library
 
 
+def dsp_package_group(module: ModuleDoc) -> str:
+    name = module.name.lower()
+    path = module.path.lower()
+    haystack = f"{name} {path}"
+    if any(token in haystack for token in ("matrix", "dot")):
+        return "Matrix"
+    if any(token in haystack for token in ("fir", "biquad", "lowpass", "filter", "equalizer", "eq_")):
+        return "Filter"
+    if any(token in haystack for token in ("fingerprint", "chirp", "correlator", "peak", "frame_stats", "zc_")):
+        return "Detection"
+    if any(token in haystack for token in ("fft", "cordic", "dds", "gain", "mix", "magnitude", "fixed_to_float", "float_to_fixed")):
+        return "Transform"
+    return "Misc"
+
+
+def package_group(module: ModuleDoc) -> str:
+    if module.category == "DSP":
+        return dsp_package_group(module)
+    return source_package_group(module)
+
+
 def module_doc_slug(module: ModuleDoc) -> str:
-    return module_slug(f"{package_group(module)}__{module.name}")
+    return module_slug(f"{package_group(module)}__{source_package_group(module)}__{module.name}")
+
+
+def docs_version(out: Path) -> str:
+    return out.name or "current"
 
 
 def write_css(out: Path, theme: str = "dark") -> None:
@@ -581,6 +606,9 @@ h3 {{ margin-top: 24px; }}
 .datasheet-link-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 14px; }}
 .datasheet-link-row:first-child {{ border-top: 0; }}
 .datasheet-link-row .meta {{ white-space: nowrap; }}
+.doc-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
+.doc-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; color: var(--ink); }}
+.doc-section-body {{ padding: 0 12px 12px; }}
 table {{ width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 14px; }}
 th, td {{ border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }}
 th {{ background: var(--panel); font-weight: 700; }}
@@ -626,6 +654,10 @@ def paragraph(text: str, fallback: str = "") -> str:
     if not value:
         return ""
     return "".join(f"<p>{html.escape(part.strip())}</p>" for part in value.split("\n\n") if part.strip())
+
+
+def detail_section(title: str, content: str) -> str:
+    return f'<details class="doc-section"><summary>{html.escape(title)}</summary><div class="doc-section-body">{content}</div></details>'
 
 
 def field_table(title: str, fields: list[FieldDoc], include_direction: bool) -> str:
@@ -886,6 +918,52 @@ def source_snippet(module: ModuleDoc, root: Path) -> str:
     entity_match = re.search(rf"entity\s+{re.escape(module.name)}\s+is.*?end(?:\s+entity)?(?:\s+{re.escape(module.name)})?\s*;", text, re.IGNORECASE | re.DOTALL)
     snippet = entity_match.group(0) if entity_match else "\n".join(text.splitlines()[:80])
     return f"<pre><code>{html.escape(snippet)}</code></pre>"
+
+
+def vhdl_include_template(module: ModuleDoc) -> str:
+    library = module.library if module.library else "work"
+    lines = [
+        "library ieee;",
+        "use ieee.std_logic_1164.all;",
+        "use ieee.numeric_std.all;",
+        "",
+        f"library {library};",
+        "-- Direct entity instantiation below does not require importing the entity name.",
+        "-- Add package imports only when your surrounding design needs package types/constants, for example:",
+        f"-- use {library}.<package_name>.all;",
+    ]
+    return "\n".join(lines)
+
+
+def association_template(fields: list[FieldDoc], value_fn) -> str:
+    if not fields:
+        return ""
+    width = max(len(field.name) for field in fields)
+    return ",\n".join(f"    {field.name.ljust(width)} => {value_fn(field)}" for field in fields)
+
+
+def vhdl_instantiation_template(module: ModuleDoc) -> str:
+    generic_map = association_template(module.generics, lambda field: field.default or f"<{field.name.lower()}_value>")
+    port_map = association_template(module.ports, lambda field: f"<{field.name.lower()}_signal>")
+    lines = [f"u_{module.name.lower()} : entity {module.library}.{module.name}"]
+    if generic_map:
+        lines.append("  generic map (")
+        lines.append(generic_map)
+        lines.append("  )")
+    lines.append("  port map (")
+    lines.append(port_map or "    -- No ports declared.")
+    lines.append("  );")
+    return "\n".join(lines)
+
+
+def render_integration_template(module: ModuleDoc) -> str:
+    content = (
+        "<h3>File Header</h3>"
+        f"<pre><code>{html.escape(vhdl_include_template(module))}</code></pre>"
+        "<h3>Instantiation</h3>"
+        f"<pre><code>{html.escape(vhdl_instantiation_template(module))}</code></pre>"
+    )
+    return detail_section("VHDL Include And Instantiation Template", content)
 
 
 def render_vcd_preview(vcd_path: Path) -> str:
@@ -1156,11 +1234,13 @@ def render_module(
 ) -> None:
     module_dir = out / "modules" / module_doc_slug(module)
     module_dir.mkdir(parents=True, exist_ok=True)
+    version = docs_version(out)
     body = f"""
 <header><div class="wrap">
   <nav class="breadcrumb"><a href="../../index.html">RadHDL</a> / <a href="../../libraries/{html.escape(module.library)}.html">{html.escape(module.library)}</a></nav>
   <div class="kicker">{html.escape(module.category)} / {html.escape(module.kind)}</div>
   <h1>{html.escape(module.name)}</h1>
+  <div class="meta">Documentation version: {html.escape(version)} / Package: {html.escape(package_group(module))} / Source package: {html.escape(source_package_group(module))}</div>
   <div class="summary">{paragraph(module.description, "No source description has been written for this module yet.")}</div>
 </div></header>
 <main class="wrap">
@@ -1168,6 +1248,7 @@ def render_module(
   <ul>{''.join(f'<li>{html.escape(item)}</li>' for item in use_cases(module))}</ul>
   <h2>Block Diagram</h2>
   <div class="diagram">{render_block_svg(module)}</div>
+  {render_integration_template(module)}
   {field_table("Generics", module.generics, include_direction=False)}
   {field_table("Ports", module.ports, include_direction=True)}
   {render_register_maps(module)}
@@ -1177,7 +1258,7 @@ def render_module(
   <h2>Sources</h2>
   <ul>{''.join(f'<li>{html.escape(source)}</li>' for source in module.sources)}</ul>
 </main>
-<footer><div class="wrap">Generated by radhdl-docgen {VERSION}</div></footer>
+<footer><div class="wrap">RadHDL documentation version {html.escape(version)} / Generated by radhdl-docgen {VERSION}</div></footer>
 """
     (module_dir / "index.html").write_text(page(f"{module.name} Datasheet", body, depth=2), encoding="utf-8")
 
@@ -1186,6 +1267,7 @@ def render_library_pages(modules: list[ModuleDoc], out: Path) -> None:
     lib_dir = out / "libraries"
     lib_dir.mkdir(parents=True, exist_ok=True)
     libraries = sorted({module.library for module in modules})
+    version = docs_version(out)
     for library in libraries:
         library_modules = sorted((module for module in modules if module.library == library), key=lambda item: item.name.lower())
         categories = sorted({module.category for module in library_modules})
@@ -1205,10 +1287,11 @@ def render_library_pages(modules: list[ModuleDoc], out: Path) -> None:
   <nav class="breadcrumb"><a href="../index.html">RadHDL</a> / Library</nav>
   <div class="kicker">Library Index</div>
   <h1>{html.escape(library)}</h1>
+  <div class="meta">Documentation version: {html.escape(version)}</div>
   <p class="summary">This page indexes module datasheets in the {html.escape(library)} library. Library pages are navigation and release grouping pages; implementation detail lives in the module datasheets.</p>
 </div></header>
 <main class="wrap">{''.join(sections)}</main>
-<footer><div class="wrap">Generated by radhdl-docgen {VERSION}</div></footer>
+<footer><div class="wrap">RadHDL documentation version {html.escape(version)} / Generated by radhdl-docgen {VERSION}</div></footer>
 """
         (lib_dir / f"{library}.html").write_text(page(f"{library} Library", body, depth=1), encoding="utf-8")
 
@@ -1217,10 +1300,11 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     preferred_categories = ["DSP", "Debug", "Interfaces"]
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
+    package_order = {"Transform": 0, "Matrix": 1, "Filter": 2, "Detection": 3, "Misc": 4}
     sections: list[str] = []
     for category in categories:
         category_modules = [module for module in modules if module.category == category]
-        packages = sorted({package_group(module) for module in category_modules}, key=str.lower)
+        packages = sorted({package_group(module) for module in category_modules}, key=lambda item: (package_order.get(item, 100), item.lower()))
         package_sections: list[str] = []
         for package in packages:
             package_modules = sorted(
@@ -1235,6 +1319,7 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
                         module.library,
                         module.category,
                         package,
+                        source_package_group(module),
                         module.description.splitlines()[0] if module.description else "",
                     ]
                 ).lower()
@@ -1242,17 +1327,17 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
                     '<div class="datasheet-link-row" '
                     f'data-datasheet-item data-search="{html.escape(search_text)}">'
                     f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
-                    f'<span class="meta">{len(module.ports)} ports / {len(module.generics)} generics</span>'
+                    f'<span class="meta">{html.escape(source_package_group(module))} / {len(module.ports)} ports / {len(module.generics)} generics</span>'
                     "</div>"
                 )
             package_sections.append(
-                f'<details class="package-group" open data-package-group>'
+                f'<details class="package-group" data-package-group>'
                 f'<summary>{html.escape(package)} <span class="meta">{len(package_modules)} datasheets</span></summary>'
                 f'<div class="datasheet-list">{"".join(rows)}</div>'
                 "</details>"
             )
         sections.append(
-            f'<details class="datasheet-section" open data-datasheet-section>'
+            f'<details class="datasheet-section" data-datasheet-section>'
             f'<summary>{html.escape(category)} <span class="meta">{len(category_modules)} datasheets</span></summary>'
             f'{"".join(package_sections)}'
             "</details>"
@@ -1269,9 +1354,11 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     });
     document.querySelectorAll("[data-package-group]").forEach((group) => {
       group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
+      if (query && !group.hidden) group.open = true;
     });
     document.querySelectorAll("[data-datasheet-section]").forEach((section) => {
       section.hidden = !section.querySelector("[data-package-group]:not([hidden])");
+      if (query && !section.hidden) section.open = true;
     });
   };
   input.addEventListener("input", apply);
@@ -1288,15 +1375,18 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
 
 
 def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], out: Path, root: Path) -> None:
+    version = docs_version(out)
     body = f"""
 <header><div class="wrap">
   <div class="kicker">RadHDL Documentation</div>
   <h1>RadHDL Datasheets</h1>
+  <div class="meta">Documentation version: {html.escape(version)}</div>
   <p class="summary">Static HDL documentation for RadHDL modules. Datasheets include ports, generics, source snippets, register maps, testbench links, and optional GHDL waveform previews.</p>
 </div></header>
 <main class="wrap">
   <h2>Catalog Summary</h2>
   <table><tbody>
+    <tr><th>Version</th><td>{html.escape(version)}</td></tr>
     <tr><th>Datasheets</th><td>{len(modules)}</td></tr>
     <tr><th>Testbenches</th><td>{len(benches)}</td></tr>
     <tr><th>Register maps</th><td>{len(maps)}</td></tr>
@@ -1304,7 +1394,7 @@ def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: li
   <h2>Datasheets</h2>
   {render_datasheet_browser(modules)}
 </main>
-<footer><div class="wrap">Generated by radhdl-docgen {VERSION}</div></footer>
+<footer><div class="wrap">RadHDL documentation version {html.escape(version)} / Generated by radhdl-docgen {VERSION}</div></footer>
 """
     (out / "index.html").write_text(page("RadHDL Datasheets", body), encoding="utf-8")
 
