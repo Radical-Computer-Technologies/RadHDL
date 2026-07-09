@@ -239,21 +239,11 @@ def parse_fields(block: str, is_port: bool) -> list[FieldDoc]:
     pending_comments: list[str] = []
     statement = ""
     statement_comments: list[str] = []
-    for raw in block.splitlines():
-        if raw.strip().startswith("--"):
-            pending_comments.append(clean_comment(raw))
-            continue
-        line = strip_inline_comment(raw)
-        if not line.strip():
-            continue
-        if not statement:
-            statement_comments = pending_comments
-            pending_comments = []
-        statement = f"{statement} {line.strip()}".strip()
-        if ";" not in line and raw.strip()[-1:] != ")":
-            continue
-        statement = statement.rstrip(";").rstrip(",").strip()
-        match = DECL_RE.match(statement)
+
+    def flush_statement() -> None:
+        nonlocal statement, statement_comments
+        cleaned = statement.rstrip(";").rstrip(",").strip()
+        match = DECL_RE.match(cleaned)
         if match:
             names = [name.strip() for name in match.group(1).split(",") if name.strip()]
             tail = match.group(2).strip()
@@ -270,6 +260,23 @@ def parse_fields(block: str, is_port: bool) -> list[FieldDoc]:
                     fields.append(FieldDoc(name=name, data_type=data_type, default=default, description=description))
         statement = ""
         statement_comments = []
+
+    for raw in block.splitlines():
+        if raw.strip().startswith("--"):
+            pending_comments.append(clean_comment(raw))
+            continue
+        line = strip_inline_comment(raw)
+        if not line.strip():
+            continue
+        if not statement:
+            statement_comments = pending_comments
+            pending_comments = []
+        statement = f"{statement} {line.strip()}".strip()
+        if ";" not in line and raw.strip()[-1:] != ")":
+            continue
+        flush_statement()
+    if statement:
+        flush_statement()
     return fields
 
 
