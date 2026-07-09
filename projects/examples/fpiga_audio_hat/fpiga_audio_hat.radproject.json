@@ -1,0 +1,101 @@
+{
+  "radbuild_schema": "2.0",
+  "radbuild_version": "0.2.1",
+  "project_name": "fpiga_audio_hat",
+  "description": "Gowin GW5A FPiGA Audio Hat board port using source-controlled vendor wrappers and the original FPiGA board constraints.",
+  "systems": [
+    {
+      "id": "fpiga_audio_gowin",
+      "type": "fpga.gowin",
+      "top": "FPiGA_Audio",
+      "vendor": "gowin",
+      "part": "GW5A-LV25MG121NC1/I0",
+      "device_version": "A",
+      "toolchain": {
+        "tested_install": "/home/jvincent/gowin",
+        "tested_version": "Gowin EDA V1.9.11.03 Education",
+        "entrypoint": "gw_sh"
+      },
+      "source_root": "/media/jvincent/Kingspec512/repos/FPiGA-Audio-Hat/hw_rev1_0/source/hdl",
+      "sources": [
+        "hdl-lib/DSP/FPiGA_AudioDSP/fpiga_audio_package.vhd",
+        "hdl-lib/Comms/FPiGA_I2CSlv/i2cslv.vhd",
+        "hdl-lib/Comms/FPiGA_I2CSlv/fpigaI2cReg.vhd",
+        "hdl-lib/Comms/FPiGA_I2CSlv/FPiGA-I2C-Core.vhd",
+        "hdl-lib/Audio/FPiGA_I2SCore/fpiga_i2s.vhd",
+        "gowin/fpiga_clks.vhd",
+        "gowin/wavetable_bram_gw5a.vhd",
+        "gowin/aud_dsp_mult_gw5a.vhd",
+        "hdl-lib/DSP/FPiGA_Wavetable/fpiga_wavetable.vhd",
+        "hdl-lib/DSP/FPiGA_AudioDSP/fpiga_audiodsp.vhd",
+        "audio_dsp_top.vhd"
+      ],
+      "constraints": [
+        "i2c_25k.cst",
+        "clks.sdc"
+      ],
+      "gowin_options": {
+        "use_sspi_as_gpio": true,
+        "use_cpu_as_gpio": true,
+        "cst_warn_to_error": true
+      },
+      "artifacts": {
+        "bitstream": "build/gowin/fpiga_audio/impl/pnr/fpiga_audio.fs",
+        "binary": "build/gowin/fpiga_audio/impl/pnr/fpiga_audio.bin",
+        "pnr_report": "build/gowin/fpiga_audio/impl/pnr/fpiga_audio.rpt.txt",
+        "timing_report": "build/gowin/fpiga_audio/impl/pnr/fpiga_audio.tr.html",
+        "synthesis_netlist": "build/gowin/fpiga_audio/impl/gwsynthesis/fpiga_audio.vg"
+      },
+      "validated": {
+        "date": "2026-07-08",
+        "status": "bitstream_generated",
+        "logic": "1454/23040",
+        "lut": 1287,
+        "alu": 167,
+        "registers": "1521/23280",
+        "bsram": "1/56",
+        "dsp": "2/28",
+        "io_ports": "17/86",
+        "plla": "1/6"
+      }
+    }
+  ],
+  "software": {
+    "linux_i2c_device": "/dev/i2c-1",
+    "fpga_i2c_address": "0x12",
+    "codec_i2c_address": "0x1b",
+    "codec": "SSM2603",
+    "sample_rate": 48000,
+    "i2s_word_bits": 24
+  },
+  "register_banks": [
+    {
+      "id": "fpiga_audio_i2c_regs",
+      "address_width": 8,
+      "data_width": 8,
+      "endianness": "little",
+      "registers": [
+        {"offset": "0x00", "name": "ID", "access": "ro", "description": "FPGA design ID."},
+        {"offset": "0x01", "name": "SOFT_RST", "access": "rw", "description": "Software reset control."},
+        {"offset": "0x02", "name": "SOFT_EN", "access": "rw", "description": "General design enable control."},
+        {"offset": "0x03", "name": "CONF0", "access": "rw", "description": "Audio routing and I2S operating mode."},
+        {"offset": "0x04", "name": "DSP_MODE", "access": "rw", "description": "DSP mode: pass, synth, or wavetable load."},
+        {"offset": "0x05", "name": "FREQ0", "access": "rw", "width_bits": 24, "description": "Oscillator 0 phase increment."},
+        {"offset": "0x08", "name": "FREQ1", "access": "rw", "width_bits": 24, "description": "Oscillator 1 phase increment."},
+        {"offset": "0x0b", "name": "FREQ2", "access": "rw", "width_bits": 24, "description": "Oscillator 2 phase increment."},
+        {"offset": "0x0e", "name": "FREQ3", "access": "rw", "width_bits": 24, "description": "Oscillator 3 phase increment."},
+        {"offset": "0x11", "name": "OSC_WAVE_SELECT", "access": "rw", "description": "Four packed 2-bit wavetable selectors."},
+        {"offset": "0x12", "name": "VOICE_GATE", "access": "rw", "width_bits": 16, "description": "Voice gate bitmap."},
+        {"offset": "0x14", "name": "WAVE_STATUS_CONTROL", "access": "rw", "description": "Read returns wavetable ready status; write pulses wavetable write control."},
+        {"offset": "0x15", "name": "WAVE_DATA", "access": "rw", "width_bits": 24, "description": "Wavetable sample write data."},
+        {"offset": "0x18", "name": "DSP_CONTROL", "access": "rw", "description": "DSP control flags. Bit 2 enables mixer path."},
+        {"offset": "0x19", "name": "LEFT_VOLUME", "access": "rw", "width_bits": 24, "description": "Left mixer output volume."},
+        {"offset": "0x1c", "name": "RIGHT_VOLUME", "access": "rw", "width_bits": 24, "description": "Right mixer output volume."},
+        {"offset": "0x1f", "name": "OSC0_VOLUME", "access": "rw", "width_bits": 24, "description": "Oscillator 0 volume."},
+        {"offset": "0x22", "name": "OSC1_VOLUME", "access": "rw", "width_bits": 24, "description": "Oscillator 1 volume."},
+        {"offset": "0x25", "name": "OSC2_VOLUME", "access": "rw", "width_bits": 24, "description": "Oscillator 2 volume."},
+        {"offset": "0x28", "name": "OSC3_VOLUME", "access": "rw", "width_bits": 24, "description": "Oscillator 3 volume."}
+      ]
+    }
+  ]
+}
