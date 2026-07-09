@@ -30,6 +30,11 @@ HDL_SIM_MODEL_DIRS = {
     "raddsp": ("dsp/hdl/raddsp/sim",),
     "radif": ("interfaces/hdl/radif/sim",),
 }
+SHARED_PROTOCOL_SOURCES = (
+    "common/hdl/src/radhdl_axis_pkg.vhd",
+    "common/hdl/src/radhdl_spi_pkg.vhd",
+    "common/hdl/src/radhdl_axi_pkg.vhd",
+)
 VENDOR_SIM_LIBRARIES = {"unisim", "unimacro", "unisims_ver"}
 GHDL_BASE_ARGS = ["--std=08", "--ieee=synopsys"]
 EXCLUDED_PARTS = {
@@ -2620,6 +2625,10 @@ def library_sources(root: Path, library: str) -> list[Path]:
     return sorted(sources, key=source_priority)
 
 
+def shared_protocol_sources(root: Path) -> list[Path]:
+    return [root / rel for rel in SHARED_PROTOCOL_SOURCES if (root / rel).exists()]
+
+
 def testbench_work_sources(testbench: Path, root: Path, libraries: list[str]) -> list[Path]:
     sources: list[Path] = []
     for path in sorted(testbench.parent.glob("*.vhd")):
@@ -2725,7 +2734,10 @@ def run_ghdl(testbench: TestbenchDoc, root: Path, out: Path, strict: bool = Fals
             if (root / "sim/xpm").exists():
                 analyze_sources(ghdl, root, work, "xpm", library_sources(root, "xpm"), status)
             for library in libraries:
-                analyze_sources(ghdl, root, work, library, library_sources(root, library), status)
+                sources = list(library_sources(root, library))
+                if library in {"raddsp", "radif", "radila"}:
+                    sources = shared_protocol_sources(root) + sources
+                analyze_sources(ghdl, root, work, library, sources, status)
             analyze_sources(ghdl, root, work, "work", testbench_work_sources(tb_path, root, libraries), status)
             run_ghdl_command([ghdl, "-e", *GHDL_BASE_ARGS, f"-P{work}", f"--workdir={work}", testbench.name], work)
             vcd = sim_dir / f"{testbench.name}.vcd"
@@ -2784,7 +2796,7 @@ def render_testbenches(
             bench.simulation = status
         state = status.get("status", "not-run") if status else "not-run"
         reference_plots = render_directed_plots(root, bench.path, [])
-        if run_sims and state != "passed" and not reference_plots:
+        if run_sims and state != "passed":
             continue
         artifact_links = []
         status_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / "simulation_status.json"
