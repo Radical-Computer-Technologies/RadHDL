@@ -1,0 +1,57 @@
+{
+  "clock": {
+    "frequency_mhz": 100.0,
+    "period_ns": 10.0,
+    "port": "clk"
+  },
+  "generics": {},
+  "library": "work",
+  "metrics": {
+    "timing": {
+      "hold_ths_ns": 0.0,
+      "hold_whs_ns": 0.183,
+      "setup_tns_ns": -26.431,
+      "setup_wns_ns": -1.652
+    },
+    "utilization": {
+      "bonded_iob": 329,
+      "bonded_iob_available": "210",
+      "bonded_iob_util_percent": "156.67",
+      "bram_tiles": 0,
+      "bram_tiles_available": "50",
+      "bram_tiles_util_percent": "0.00",
+      "dsps": 16,
+      "dsps_available": "90",
+      "dsps_util_percent": "17.78",
+      "ramb18": 0,
+      "ramb18_available": "100",
+      "ramb18_util_percent": "0.00",
+      "ramb36_fifo": 0,
+      "ramb36_fifo_available": "50",
+      "ramb36_fifo_util_percent": "0.00",
+      "slice_luts": 566,
+      "slice_luts_available": "20800",
+      "slice_luts_util_percent": "2.72",
+      "slice_registers": 243,
+      "slice_registers_available": "41600",
+      "slice_registers_util_percent": "0.58"
+    }
+  },
+  "module": "raddsp_axis_fir",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_fir",
+  "part": "xc7a35tcsg324-2",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_fir/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_fir/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_fir.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "raddsp_axis_fir"
+}

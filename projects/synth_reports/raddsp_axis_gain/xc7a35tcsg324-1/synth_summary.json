@@ -1,0 +1,30 @@
+{
+  "clock": {
+    "frequency_mhz": 100.0,
+    "period_ns": 10.0,
+    "port": "clk"
+  },
+  "generics": {},
+  "library": "work",
+  "metrics": {
+    "timing": {},
+    "utilization": {}
+  },
+  "module": "raddsp_axis_gain",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_gain",
+  "part": "xc7a35tcsg324-1",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_gain/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_gain/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_gain.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "raddsp_axis_gain"
+}

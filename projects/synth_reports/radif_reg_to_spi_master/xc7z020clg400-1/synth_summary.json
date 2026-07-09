@@ -1,0 +1,55 @@
+{
+  "clock": {
+    "frequency_mhz": 100.0,
+    "period_ns": 10.0,
+    "port": "clk"
+  },
+  "generics": {},
+  "library": "work",
+  "metrics": {
+    "timing": {
+      "hold_ths_ns": 0.0,
+      "hold_whs_ns": 0.152,
+      "setup_tns_ns": 0.0,
+      "setup_wns_ns": 5.704
+    },
+    "utilization": {
+      "bonded_iob": 93,
+      "bonded_iob_available": "125",
+      "bonded_iob_util_percent": "74.40",
+      "bram_tiles": 0,
+      "bram_tiles_available": "140",
+      "bram_tiles_util_percent": "0.00",
+      "dsps": 0,
+      "dsps_available": "220",
+      "dsps_util_percent": "0.00",
+      "ramb18": 0,
+      "ramb18_available": "280",
+      "ramb18_util_percent": "0.00",
+      "ramb36_fifo": 0,
+      "ramb36_fifo_available": "140",
+      "ramb36_fifo_util_percent": "0.00",
+      "slice_luts": 202,
+      "slice_luts_available": "53200",
+      "slice_luts_util_percent": "0.38",
+      "slice_registers": 272,
+      "slice_registers_available": "106400",
+      "slice_registers_util_percent": "0.26"
+    }
+  },
+  "module": "radif_reg_to_spi_master",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_reg_to_spi_master",
+  "part": "xc7z020clg400-1",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_reg_to_spi_master/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_reg_to_spi_master/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/interfaces/hdl/radif/src/radif_reg_to_spi_master.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "radif_reg_to_spi_master"
+}

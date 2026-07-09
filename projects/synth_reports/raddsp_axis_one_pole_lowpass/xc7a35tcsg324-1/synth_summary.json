@@ -1,0 +1,35 @@
+{
+  "clock": {
+    "frequency_mhz": 100.0,
+    "period_ns": 10.0,
+    "port": "clk"
+  },
+  "generics": {},
+  "library": "work",
+  "metrics": {
+    "timing": {
+      "hold_ths_ns": 0.0,
+      "hold_whs_ns": 0.435,
+      "setup_tns_ns": -63.011,
+      "setup_wns_ns": -1.976
+    },
+    "utilization": {}
+  },
+  "module": "raddsp_axis_one_pole_lowpass",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_one_pole_lowpass",
+  "part": "xc7a35tcsg324-1",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_one_pole_lowpass/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_one_pole_lowpass/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_one_pole_lowpass.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "raddsp_axis_one_pole_lowpass"
+}

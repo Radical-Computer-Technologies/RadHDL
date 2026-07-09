@@ -1,0 +1,35 @@
+{
+  "clock": {
+    "frequency_mhz": 100.0,
+    "period_ns": 10.0,
+    "port": "clk"
+  },
+  "generics": {},
+  "library": "work",
+  "metrics": {
+    "timing": {
+      "hold_ths_ns": 0.0,
+      "hold_whs_ns": 0.138,
+      "setup_tns_ns": 0.0,
+      "setup_wns_ns": 7.309
+    },
+    "utilization": {}
+  },
+  "module": "raddsp_axis_matrix_dot",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_matrix_dot",
+  "part": "xc7z020clg400-3",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_matrix_dot/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/raddsp_axis_matrix_dot/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+    "/media/jvincent/Kingspec512/repos/RadHDL/dsp/hdl/raddsp/src/raddsp_axis_matrix_dot.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "raddsp_axis_matrix_dot"
+}

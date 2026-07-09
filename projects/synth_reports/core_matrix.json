@@ -2,33 +2,42 @@
   "schema": "radhdl.core_synth_matrix.v1",
   "targets": [
     {
-      "id": "zynq_7020",
+      "id": "zynq_7020_sg1",
       "part": "xc7z020clg400-1",
       "clock_period_ns": 10.0
     },
     {
-      "id": "zynq_usplus_zu3eg",
+      "id": "zynq_7020_sg2",
+      "part": "xc7z020clg400-2",
+      "clock_period_ns": 10.0
+    },
+    {
+      "id": "zynq_7020_sg3",
+      "part": "xc7z020clg400-3",
+      "clock_period_ns": 10.0
+    },
+    {
+      "id": "zynq_usplus_zu3eg_sg1",
       "part": "xczu3eg-sfvc784-1-e",
       "clock_period_ns": 6.667
+    },
+    {
+      "id": "zynq_usplus_zu3eg_sg2",
+      "part": "xczu3eg-sfvc784-2-e",
+      "clock_period_ns": 6.667
+    },
+    {
+      "id": "artix7_35t_sg1",
+      "part": "xc7a35tcsg324-1",
+      "clock_period_ns": 10.0
+    },
+    {
+      "id": "artix7_35t_sg2",
+      "part": "xc7a35tcsg324-2",
+      "clock_period_ns": 10.0
     }
   ],
   "cores": [
-    {
-      "module": "radif_gpio_reg_block",
-      "library": "radif",
-      "clock_port": "clk",
-      "sources": [
-        "interfaces/hdl/radif/src/radif_gpio_reg_block.vhd"
-      ]
-    },
-    {
-      "module": "radif_irq_controller",
-      "library": "radif",
-      "clock_port": "clk",
-      "sources": [
-        "interfaces/hdl/radif/src/radif_irq_controller.vhd"
-      ]
-    },
     {
       "module": "raddsp_axis_gain",
       "library": "work",
@@ -39,10 +48,305 @@
         "dsp/hdl/raddsp/src/raddsp_axis_gain.vhd"
       ],
       "target_generics": {
-        "zynq_usplus_zu3eg": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
           "DEVICE_FAMILY": "ultrascaleplus"
         }
       }
+    },
+    {
+      "module": "raddsp_axis_fir",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_fir.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_one_pole_lowpass",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_one_pole_lowpass.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_matrix_dot",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_matrix_dot.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_matrix_elementwise",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_matrix_elementwise.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_frame_stats",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_frame_stats.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_iq_magnitude_sq",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_iq_magnitude_sq.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg_sg1": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        },
+        "zynq_usplus_zu3eg_sg2": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    },
+    {
+      "module": "raddsp_axis_mix2",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_mix2.vhd"
+      ]
+    },
+    {
+      "module": "raddsp_axis_am_iq_modulator",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_am_iq_modulator.vhd"
+      ]
+    },
+    {
+      "module": "raddsp_axis_am_iq_demodulator",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_am_iq_demodulator.vhd"
+      ]
+    },
+    {
+      "module": "raddsp_sqrt_u32",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_sqrt_u32.vhd"
+      ]
+    },
+    {
+      "module": "raddsp_axis_dds",
+      "library": "work",
+      "clock_port": "clk",
+      "library_sources": [
+        {
+          "library": "xpm",
+          "source": "sim/xpm/xpm_memory_models.vhd"
+        }
+      ],
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_dds.vhd"
+      ]
+    },
+    {
+      "module": "radif_gpio_reg_block",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_gpio_reg_block.vhd"
+      ]
+    },
+    {
+      "module": "radif_irq_controller",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_irq_controller.vhd"
+      ]
+    },
+    {
+      "module": "radif_reg_bank",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_pkg.vhd",
+        "interfaces/hdl/radif/src/radif_reg_bank.vhd"
+      ]
+    },
+    {
+      "module": "radif_reg_interconnect",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_reg_interconnect.vhd"
+      ]
+    },
+    {
+      "module": "radif_reg_to_spi_master",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_reg_to_spi_master.vhd"
+      ]
+    },
+    {
+      "module": "radif_reg_to_i2c_master",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_reg_to_i2c_master.vhd"
+      ]
+    },
+    {
+      "module": "radif_uart_to_reg",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_uart_to_reg.vhd"
+      ]
+    },
+    {
+      "module": "radif_smi16_to_reg",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_smi16_to_reg.vhd"
+      ]
+    },
+    {
+      "module": "radif_i2s_axis",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_i2s_axis.vhd"
+      ]
+    },
+    {
+      "module": "radif_axi_lite_to_reg",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_axi_lite_to_reg.vhd"
+      ]
+    },
+    {
+      "module": "radif_spi_slave_to_reg",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_spi_slave_to_reg.vhd"
+      ]
+    },
+    {
+      "module": "radif_qspi_slave_to_reg",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_qspi_slave_to_reg.vhd"
+      ]
+    },
+    {
+      "module": "radif_axi4_axis_dma",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/sim/xpm_fifo_sync.vhd",
+        "interfaces/hdl/radif/src/radif_axi4_axis_dma.vhd"
+      ]
+    },
+    {
+      "module": "RadILA",
+      "library": "work",
+      "clock_port": "clk",
+      "library_sources": [
+        {
+          "library": "xpm",
+          "source": "sim/xpm/xpm_memory_models.vhd"
+        }
+      ],
+      "sources": [
+        "debug/radila/hdl/radila/radila_core.vhd"
+      ]
+    },
+    {
+      "module": "RadDebugHub",
+      "library": "work",
+      "clock_port": "clk",
+      "library_sources": [
+        {
+          "library": "xpm",
+          "source": "sim/xpm/xpm_memory_models.vhd"
+        }
+      ],
+      "sources": [
+        "debug/radila/hdl/radila/radila_core.vhd",
+        "debug/radila/hdl/radila/raddebughub.vhd"
+      ]
     }
   ]
 }
