@@ -42,6 +42,7 @@ EXCLUDED_PARTS = {
     "iprepo",
     "release",
     "sim",
+    "verification",
     "xci",
     "xsim.dir",
     "ip_user_files",
@@ -50,6 +51,7 @@ EXCLUDED_PARTS = {
 }
 ENTITY_RE = re.compile(r"^\s*entity\s+([A-Za-z][A-Za-z0-9_]*)\s+is\b", re.IGNORECASE | re.MULTILINE)
 PACKAGE_RE = re.compile(r"^\s*package\s+(?!body\b)([A-Za-z][A-Za-z0-9_]*)\s+is\b", re.IGNORECASE | re.MULTILINE)
+END_PACKAGE_RE = re.compile(r"^\s*end\s+package(?:\s+[A-Za-z][A-Za-z0-9_]*)?\s*;", re.IGNORECASE | re.MULTILINE)
 END_ENTITY_RE = re.compile(r"^\s*end(?:\s+entity)?(?:\s+[A-Za-z][A-Za-z0-9_]*)?\s*;", re.IGNORECASE | re.MULTILINE)
 DECL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z0-9_,\s]*)\s*:\s*(.+?)\s*;?\s*$", re.DOTALL)
 PORT_RE = re.compile(r"^(inout|in|out|buffer)\s+(.+)$", re.IGNORECASE | re.DOTALL)
@@ -105,6 +107,19 @@ class RegisterMapDoc:
 
 
 @dataclass
+class SynthReportDoc:
+    module: str
+    part: str
+    tool: str = ""
+    status: str = ""
+    clock: dict[str, Any] = field(default_factory=dict)
+    generics: dict[str, str] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
+    reports: dict[str, str] = field(default_factory=dict)
+    path: str = ""
+
+
+@dataclass
 class ModuleDoc:
     name: str
     kind: str
@@ -117,6 +132,29 @@ class ModuleDoc:
     sources: list[str] = field(default_factory=list)
     testbenches: list[TestbenchDoc] = field(default_factory=list)
     register_maps: list[RegisterMapDoc] = field(default_factory=list)
+    synth_reports: list[SynthReportDoc] = field(default_factory=list)
+
+
+@dataclass
+class TypeDoc:
+    name: str
+    kind: str
+    declaration: str = ""
+    description: str = ""
+    fields: list[FieldDoc] = field(default_factory=list)
+
+
+@dataclass
+class PackageDoc:
+    name: str
+    path: str
+    library: str
+    category: str
+    description: str = ""
+    types: list[TypeDoc] = field(default_factory=list)
+    subtypes: list[TypeDoc] = field(default_factory=list)
+    constants: list[TypeDoc] = field(default_factory=list)
+    functions: list[TypeDoc] = field(default_factory=list)
 
 
 @dataclass
@@ -718,13 +756,175 @@ def attach_register_maps(modules: list[ModuleDoc], maps: list[RegisterMapDoc]) -
                     break
 
 
+def package_library_for(path: Path, root: Path) -> str:
+    parts = rel_path(path, root).split(os.sep)
+    if "common" in parts:
+        return "radhdl"
+    if "raddsp" in parts:
+        return "raddsp"
+    if "radif" in parts:
+        return "radif"
+    if "radila" in parts:
+        return "raddebug"
+    return library_for(path, root)
+
+
+def extract_package_body(text: str, package_match: re.Match[str]) -> str:
+    body_start = package_match.end()
+    package_name = re.escape(package_match.group(1))
+    end_re = re.compile(
+        rf"^\s*end\s+(?:package(?:\s+{package_name})?|{package_name})\s*;",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    end_match = end_re.search(text, body_start)
+    if not end_match:
+        end_match = END_PACKAGE_RE.search(text, body_start)
+    if not end_match:
+        return text[body_start:]
+    return text[body_start:end_match.start()]
+
+
+def line_index_for_offset(text: str, offset: int) -> int:
+    return text[:offset].count("\n")
+
+
+def parse_record_fields(record_body: str) -> list[FieldDoc]:
+    fields: list[FieldDoc] = []
+    for raw in record_body.split(";"):
+        line = strip_inline_comment(raw).strip()
+        if not line:
+            continue
+        match = DECL_RE.match(line)
+        if not match:
+            continue
+        names = [name.strip() for name in match.group(1).split(",") if name.strip()]
+        data_type = " ".join(match.group(2).split())
+        for name in names:
+            fields.append(FieldDoc(name=name, data_type=data_type))
+    return fields
+
+
+def discover_packages(root: Path) -> list[PackageDoc]:
+    packages: list[PackageDoc] = []
+    record_re = re.compile(r"\btype\s+([A-Za-z][A-Za-z0-9_]*)\s+is\s+record\b(.*?)\bend\s+record\s*;", re.IGNORECASE | re.DOTALL)
+    subtype_re = re.compile(r"\bsubtype\s+([A-Za-z][A-Za-z0-9_]*)\s+is\s+([^;]+);", re.IGNORECASE)
+    constant_re = re.compile(r"\bconstant\s+([A-Za-z][A-Za-z0-9_]*)\s*:\s*([^;]+);", re.IGNORECASE)
+    function_re = re.compile(r"\bfunction\s+([A-Za-z][A-Za-z0-9_]*)\s*\((.*?)\)\s*return\s+([^;]+);", re.IGNORECASE | re.DOTALL)
+
+    for path in sorted(root.rglob("*.vhd")):
+        if should_skip(path, root):
+            continue
+        text = read_text(path)
+        package_match = PACKAGE_RE.search(text)
+        if not package_match:
+            continue
+        lines = text.splitlines()
+        package_name = package_match.group(1)
+        body = extract_package_body(text, package_match)
+        body_offset = package_match.end()
+        package_doc = PackageDoc(
+            name=package_name,
+            path=rel_path(path, root),
+            library=package_library_for(path, root),
+            category=category_for(path, root),
+            description=comment_block_before(lines, line_index_for_offset(text, package_match.start())),
+        )
+
+        for match in record_re.finditer(body):
+            line_index = line_index_for_offset(text, body_offset + match.start())
+            declaration = " ".join(match.group(0).split())
+            package_doc.types.append(
+                TypeDoc(
+                    name=match.group(1),
+                    kind="record",
+                    declaration=declaration,
+                    description=comment_block_before(lines, line_index),
+                    fields=parse_record_fields(match.group(2)),
+                )
+            )
+        for match in subtype_re.finditer(body):
+            line_index = line_index_for_offset(text, body_offset + match.start())
+            package_doc.subtypes.append(
+                TypeDoc(
+                    name=match.group(1),
+                    kind="subtype",
+                    declaration=f"subtype {match.group(1)} is {' '.join(match.group(2).split())};",
+                    description=comment_block_before(lines, line_index),
+                )
+            )
+        for match in constant_re.finditer(body):
+            line_index = line_index_for_offset(text, body_offset + match.start())
+            package_doc.constants.append(
+                TypeDoc(
+                    name=match.group(1),
+                    kind="constant",
+                    declaration=f"constant {match.group(1)} : {' '.join(match.group(2).split())};",
+                    description=comment_block_before(lines, line_index),
+                )
+            )
+        for match in function_re.finditer(body):
+            line_index = line_index_for_offset(text, body_offset + match.start())
+            args = " ".join(match.group(2).split())
+            ret = " ".join(match.group(3).split())
+            package_doc.functions.append(
+                TypeDoc(
+                    name=match.group(1),
+                    kind="function",
+                    declaration=f"function {match.group(1)}({args}) return {ret};",
+                    description=comment_block_before(lines, line_index),
+                )
+            )
+        if package_doc.types or package_doc.subtypes or package_doc.constants or package_doc.functions:
+            packages.append(package_doc)
+    return packages
+
+
+def load_synth_reports(root: Path) -> list[SynthReportDoc]:
+    reports: list[SynthReportDoc] = []
+    for path in sorted((root / "projects" / "synth_reports").glob("**/synth_summary.json")):
+        try:
+            data = json.loads(read_text(path))
+        except json.JSONDecodeError:
+            continue
+        module_name = str(data.get("module") or data.get("top") or "")
+        part = str(data.get("part") or "")
+        if not module_name or not part or data.get("status") != "ok":
+            continue
+        reports.append(
+            SynthReportDoc(
+                module=module_name,
+                part=part,
+                tool=str(data.get("tool") or ""),
+                status=str(data.get("status") or ""),
+                clock=dict(data.get("clock") or {}),
+                generics={str(k): str(v) for k, v in dict(data.get("generics") or {}).items()},
+                metrics=dict(data.get("metrics") or {}),
+                reports={str(k): str(v) for k, v in dict(data.get("reports") or {}).items()},
+                path=rel_path(path, root),
+            )
+        )
+    return reports
+
+
+def attach_synth_reports(modules: list[ModuleDoc], reports: list[SynthReportDoc]) -> None:
+    by_name: dict[str, ModuleDoc] = {module.name.lower(): module for module in modules}
+    for report in reports:
+        module = by_name.get(report.module.lower())
+        if module is not None:
+            module.synth_reports.append(report)
+    for module in modules:
+        module.synth_reports.sort(key=lambda item: (item.part, item.clock.get("period_ns") or 0))
+
+
 def catalog(root: Path) -> tuple[list[ModuleDoc], list[TestbenchDoc], list[RegisterMapDoc]]:
     modules = discover_modules(root)
     benches = discover_testbenches(root)
     maps = load_register_maps(root)
+    synth_reports = load_synth_reports(root)
     associate_testbenches(modules, benches, root)
     attach_register_maps(modules, maps)
     maps.extend(attach_inferred_register_maps(modules, root))
+    attach_synth_reports(modules, synth_reports)
     return modules, benches, maps
 
 
@@ -734,6 +934,7 @@ def datasheet_modules(modules: list[ModuleDoc]) -> list[ModuleDoc]:
 
 def json_catalog(root: Path) -> dict[str, Any]:
     modules, benches, maps = catalog(root)
+    packages = discover_packages(root)
     return {
         "schema": "radhdl-docgen-catalog",
         "version": VERSION,
@@ -741,6 +942,7 @@ def json_catalog(root: Path) -> dict[str, Any]:
         "modules": [asdict(module) for module in modules],
         "testbenches": [asdict(bench) for bench in benches],
         "register_maps": [asdict(regmap) for regmap in maps],
+        "packages": [asdict(package) for package in packages],
     }
 
 
@@ -856,6 +1058,8 @@ def render_module_quick_links(module: ModuleDoc) -> str:
         links.append(f'<a class="pill" href="#register-maps">{html.escape(label)}</a>')
     if module.testbenches:
         links.append(f'<a class="pill" href="#testbenches">Testbenches: {len(module.testbenches)}</a>')
+    if module.synth_reports:
+        links.append(f'<a class="pill" href="#implementation-metrics">Implementation metrics: {len(module.synth_reports)}</a>')
     if not links:
         return ""
     return f'<div class="quick-links">{"".join(links)}</div>'
@@ -916,6 +1120,11 @@ h3 {{ margin-top: 24px; }}
 .pill:hover {{ text-decoration: none; border-color: var(--accent); }}
 .register-index .datasheet-list {{ max-height: 340px; }}
 .register-index .datasheet-link-row {{ align-items: baseline; }}
+.type-grid {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
+.type-card {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 10px 0; }}
+.type-card > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 800; }}
+.type-body {{ padding: 0 12px 12px; }}
+.type-decl {{ white-space: pre-wrap; overflow-x: auto; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }}
 .doc-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
 .doc-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; color: var(--ink); }}
 .doc-section-body {{ padding: 0 12px 12px; }}
@@ -1512,6 +1721,49 @@ def render_integration_template(module: ModuleDoc) -> str:
         f"<pre><code>{html.escape(vhdl_instantiation_template(module))}</code></pre>"
     )
     return detail_section("VHDL Include And Instantiation Template", content)
+
+
+def metric_value(metrics: dict[str, Any], key: str) -> str:
+    value = metrics.get(key)
+    if value is None or value == "":
+        return "-"
+    return str(value)
+
+
+def render_implementation_metrics(module: ModuleDoc) -> str:
+    if not module.synth_reports:
+        return ""
+    rows = []
+    for report in module.synth_reports:
+        util = dict(report.metrics.get("utilization") or {})
+        timing = dict(report.metrics.get("timing") or {})
+        clock = dict(report.clock or {})
+        generic_text = ", ".join(f"{key}={value}" for key, value in sorted(report.generics.items())) or "-"
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(report.part)}</td>"
+            f"<td>{html.escape(str(clock.get('period_ns') or '-'))}</td>"
+            f"<td>{html.escape(str(clock.get('frequency_mhz') or '-'))}</td>"
+            f"<td>{html.escape(metric_value(util, 'slice_luts'))}</td>"
+            f"<td>{html.escape(metric_value(util, 'slice_registers'))}</td>"
+            f"<td>{html.escape(metric_value(util, 'bram_tiles'))}</td>"
+            f"<td>{html.escape(metric_value(util, 'dsps'))}</td>"
+            f"<td>{html.escape(metric_value(timing, 'setup_wns_ns'))}</td>"
+            f"<td>{html.escape(metric_value(timing, 'hold_whs_ns'))}</td>"
+            f"<td>{html.escape(generic_text)}</td>"
+            f"<td>{html.escape(report.path)}</td>"
+            "</tr>"
+        )
+    return (
+        '<h2 id="implementation-metrics">Measured Implementation Metrics</h2>'
+        '<p class="summary">Metrics are generated by RadBuild from real Vivado synthesis reports for representative device targets. '
+        'Raw report paths are preserved in the checked summary JSON.</p>'
+        '<table><thead><tr>'
+        '<th>Part</th><th>Clock ns</th><th>MHz</th><th>LUTs</th><th>FFs</th><th>BRAM tiles</th><th>DSPs</th><th>Setup WNS ns</th><th>Hold WHS ns</th><th>Generics</th><th>Summary</th>'
+        '</tr></thead><tbody>'
+        + "".join(rows)
+        + "</tbody></table>"
+    )
 
 
 def normalize_wave_value(value: str) -> str:
@@ -2602,6 +2854,7 @@ def render_module(
   {render_integration_template(module)}
   {field_table("Generics", module.generics, include_direction=False)}
   {field_table("Ports", ordered_ports_for_docs(module.ports), include_direction=True)}
+  {render_implementation_metrics(module)}
   {render_register_interfaces(module)}
   {render_register_maps(module)}
   {render_testbenches(module, root, out, run_sims, strict, stop_time, sim_cache)}
@@ -2856,7 +3109,85 @@ def render_register_index(modules: list[ModuleDoc]) -> str:
     )
 
 
-def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], out: Path, root: Path) -> None:
+def render_type_table(fields: list[FieldDoc]) -> str:
+    if not fields:
+        return ""
+    rows = "".join(
+        f"<tr><td>{html.escape(field.name)}</td><td><code>{html.escape(field.data_type)}</code></td><td>{html.escape(field.description)}</td></tr>"
+        for field in fields
+    )
+    return f"<table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table>"
+
+
+def render_type_cards(title: str, items: list[TypeDoc]) -> str:
+    if not items:
+        return ""
+    cards = []
+    for item in sorted(items, key=lambda entry: entry.name.lower()):
+        desc = f"<p>{html.escape(item.description)}</p>" if item.description else ""
+        fields = render_type_table(item.fields)
+        cards.append(
+            f'<details class="type-card">'
+            f'<summary>{html.escape(item.name)} <span class="meta">{html.escape(item.kind)}</span></summary>'
+            f'<div class="type-body">{desc}<pre class="type-decl"><code>{html.escape(item.declaration)}</code></pre>{fields}</div>'
+            "</details>"
+        )
+    return f"<h3>{html.escape(title)}</h3><div class=\"type-grid\">{''.join(cards)}</div>"
+
+
+def render_type_docs(packages: list[PackageDoc], out: Path) -> None:
+    type_dir = out / "types"
+    type_dir.mkdir(parents=True, exist_ok=True)
+    version = docs_version(out)
+    by_library = sorted({package.library for package in packages})
+    index_rows = []
+    for library in by_library:
+        library_packages = sorted([package for package in packages if package.library == library], key=lambda item: item.name.lower())
+        sections = []
+        for package in library_packages:
+            desc = f"<p class=\"summary\">{html.escape(package.description)}</p>" if package.description else ""
+            sections.append(
+                f'<details class="doc-section">'
+                f'<summary>{html.escape(package.name)} <span class="meta">{html.escape(package.path)}</span></summary>'
+                f'<div class="doc-section-body">{desc}'
+                f'{render_type_cards("Records", package.types)}'
+                f'{render_type_cards("Subtypes", package.subtypes)}'
+                f'{render_type_cards("Constants", package.constants)}'
+                f'{render_type_cards("Functions", package.functions)}'
+                "</div></details>"
+            )
+        body = f"""
+<header><div class="wrap">
+  <nav class="breadcrumb"><a href="../index.html">RadHDL</a> / Type Reference</nav>
+  <div class="kicker">Type Reference</div>
+  <h1>{html.escape(library)} Types</h1>
+  <div class="meta">Documentation version: {html.escape(version)}</div>
+  <p class="summary">Package-level records, subtypes, constants, and helper functions for the {html.escape(library)} library.</p>
+</div></header>
+<main class="wrap">{''.join(sections)}</main>
+<footer><div class="wrap">RadHDL documentation version {html.escape(version)} / Generated by radhdl-docgen {VERSION}</div></footer>
+"""
+        (type_dir / f"{module_slug(library)}.html").write_text(page(f"{library} Type Reference", body, depth=1), encoding="utf-8")
+        index_rows.append(
+            f'<div class="datasheet-link-row"><a href="types/{module_slug(library)}.html">{html.escape(library)}</a>'
+            f'<span class="meta">{len(library_packages)} packages</span></div>'
+        )
+
+    body = f"""
+<header><div class="wrap">
+  <nav class="breadcrumb"><a href="../index.html">RadHDL</a></nav>
+  <div class="kicker">Type Reference</div>
+  <h1>Package Type Reference</h1>
+  <div class="meta">Documentation version: {html.escape(version)}</div>
+  <p class="summary">Library-level package documentation for records, constants, subtypes, and helper functions.</p>
+</div></header>
+<main class="wrap"><section class="datasheet-browser"><div class="datasheet-list">{''.join(index_rows)}</div></section></main>
+<footer><div class="wrap">RadHDL documentation version {html.escape(version)} / Generated by radhdl-docgen {VERSION}</div></footer>
+"""
+    (type_dir / "index.html").write_text(page("RadHDL Type Reference", body, depth=1), encoding="utf-8")
+
+
+def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: list[RegisterMapDoc], packages: list[PackageDoc], out: Path, root: Path) -> None:
     version = docs_version(out)
     body = f"""
 <header><div class="wrap">
@@ -2872,7 +3203,11 @@ def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: li
     <tr><th>Datasheets</th><td>{len(modules)}</td></tr>
     <tr><th>Testbenches</th><td>{len(benches)}</td></tr>
     <tr><th>Register maps</th><td>{len(maps)}</td></tr>
+    <tr><th>Type packages</th><td>{len(packages)}</td></tr>
   </tbody></table>
+  <h2>Type Reference</h2>
+  <p class="summary">Package-level records, constants, subtypes, and helper functions are documented separately from module datasheets.</p>
+  <p><a class="pill" href="types/index.html">Open type reference</a></p>
   <h2>Datasheets</h2>
   {render_datasheet_browser(modules)}
 </main>
@@ -2892,12 +3227,14 @@ def build_docs(args: argparse.Namespace) -> int:
     write_css(out, args.theme)
     write_brand_assets(out, default_brand_logo(root, args.brand_logo))
     hdl_units, benches, maps = catalog(root)
+    packages = discover_packages(root)
     modules = datasheet_modules(hdl_units)
     sim_cache: dict[str, dict[str, Any]] = {}
     for module in modules:
         render_module(module, root, out, args.run_sims, args.strict, args.stop_time, sim_cache)
     render_library_pages(modules, out)
-    render_index(modules, benches, maps, out, root)
+    render_type_docs(packages, out)
+    render_index(modules, benches, maps, packages, out, root)
     (out / "catalog.json").write_text(
         json.dumps(
             {
@@ -2908,6 +3245,7 @@ def build_docs(args: argparse.Namespace) -> int:
                 "hdl_units": [asdict(module) for module in hdl_units],
                 "testbenches": [asdict(bench) for bench in benches],
                 "register_maps": [asdict(regmap) for regmap in maps],
+                "packages": [asdict(package) for package in packages],
             },
             indent=2,
         )

@@ -4,6 +4,7 @@ use ieee.numeric_std.all;
 use std.env.all;
 
 library raddsp;
+use raddsp.radhdl_axis_pkg.all;
 
 -- Self-checking or stimulus-focused testbench for axis smoke.
 -- Exercises representative handshakes, reset behavior, frame boundaries, and numeric corner cases for regression runs.
@@ -19,14 +20,10 @@ architecture sim of tb_raddsp_axis_smoke is
   signal rst : std_logic := '1';
 
   signal gain_coeff : std_logic_vector(C_COEFF_WIDTH - 1 downto 0) := std_logic_vector(to_signed(512, C_COEFF_WIDTH));
-  signal gain_s_valid : std_logic := '0';
-  signal gain_s_ready : std_logic;
-  signal gain_s_data  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
-  signal gain_s_last  : std_logic := '0';
-  signal gain_m_valid : std_logic;
-  signal gain_m_ready : std_logic := '1';
-  signal gain_m_data  : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
-  signal gain_m_last  : std_logic;
+  signal gain_s_i     : axis16_saxis_i_t := AXIS16_SAXIS_I_NULL;
+  signal gain_s_o     : axis16_saxis_o_t := AXIS_SAXIS_O_NULL;
+  signal gain_m_i     : axis16_maxis_i_t := (tready => '1');
+  signal gain_m_o     : axis16_maxis_o_t := AXIS16_MAXIS_O_NULL;
 
   signal gain2_coeff : std_logic_vector((2 * C_COEFF_WIDTH) - 1 downto 0) :=
     std_logic_vector(to_signed(-256, C_COEFF_WIDTH)) &
@@ -136,6 +133,19 @@ architecture sim of tb_raddsp_axis_smoke is
     last <= '0';
   end procedure;
 
+  procedure send_axis16_sample(
+    signal s_i   : out axis16_saxis_i_t;
+    signal s_o   : in axis16_saxis_o_t;
+    value        : integer;
+    is_last      : std_logic
+  ) is
+  begin
+    wait until rising_edge(clk);
+    s_i <= axis16_saxis_i('1', std_logic_vector(to_signed(value, 16)), is_last);
+    wait until rising_edge(clk) and s_o.tready = '1';
+    s_i <= AXIS16_SAXIS_I_NULL;
+  end procedure;
+
   procedure send_pair(
     signal v0 : out std_logic;
     signal r0 : in std_logic;
@@ -165,6 +175,7 @@ architecture sim of tb_raddsp_axis_smoke is
   end procedure;
 begin
   clk <= not clk after 5 ns;
+  gain_m_i <= axis_maxis_i('1');
 
   gain_i: entity raddsp.raddsp_axis_gain
     generic map (
@@ -176,14 +187,14 @@ begin
       clk => clk,
       rst => rst,
       gain_i => gain_coeff,
-      s_axis_tvalid => gain_s_valid,
-      s_axis_tready => gain_s_ready,
-      s_axis_tdata => gain_s_data,
-      s_axis_tlast => gain_s_last,
-      m_axis_tvalid => gain_m_valid,
-      m_axis_tready => gain_m_ready,
-      m_axis_tdata => gain_m_data,
-      m_axis_tlast => gain_m_last
+      s_axis_tvalid => gain_s_i.tvalid,
+      s_axis_tready => gain_s_o.tready,
+      s_axis_tdata => gain_s_i.tdata,
+      s_axis_tlast => gain_s_i.tlast,
+      m_axis_tvalid => gain_m_o.tvalid,
+      m_axis_tready => gain_m_i.tready,
+      m_axis_tdata => gain_m_o.tdata,
+      m_axis_tlast => gain_m_o.tlast
     );
 
   gain2_i: entity raddsp.raddsp_axis_gain
@@ -384,10 +395,10 @@ begin
     wait until rising_edge(clk);
     rst <= '0';
 
-    send_sample(gain_s_valid, gain_s_ready, gain_s_data, gain_s_last, 100, '1');
-    wait until rising_edge(clk) and gain_m_valid = '1';
-    assert to_integer(signed(gain_m_data)) = 200 report "gain output mismatch" severity failure;
-    assert gain_m_last = '1' report "gain tlast mismatch" severity failure;
+    send_axis16_sample(gain_s_i, gain_s_o, 100, '1');
+    wait until rising_edge(clk) and gain_m_o.tvalid = '1';
+    assert to_integer(signed(gain_m_o.tdata)) = 200 report "gain output mismatch" severity failure;
+    assert gain_m_o.tlast = '1' report "gain tlast mismatch" severity failure;
 
     wait until rising_edge(clk);
     gain2_s_data <= std_logic_vector(to_signed(-30, C_DATA_WIDTH)) &

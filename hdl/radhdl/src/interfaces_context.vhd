@@ -4,5 +4,8 @@ context interfaces_context is
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
   library radhdl;
+  use radhdl.radhdl_axi_pkg.all;
+  use radhdl.radhdl_axis_pkg.all;
+  use radhdl.radhdl_spi_pkg.all;
   use radhdl.interfaces.all;
 end context interfaces_context;

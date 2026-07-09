@@ -4,6 +4,7 @@ use ieee.numeric_std.all;
 use std.env.all;
 
 library radif;
+use radif.radhdl_spi_pkg.all;
 
 -- Exercises the register-controlled 4-wire SPI master with a looped-back MISO/MOSI path.
 -- The waveform shows software register writes, chip-select assertion, generated SCLK pulses, MOSI output shifting, MISO input sampling, and transaction completion status.
@@ -24,13 +25,11 @@ architecture sim of tb_radif_reg_to_spi_master is
   signal reg_wr_valid : std_logic;
   signal reg_rd_valid : std_logic;
   signal reg_error    : std_logic;
-  signal spi_sclk     : std_logic;
-  signal spi_cs_n     : std_logic;
-  signal spi_mosi     : std_logic;
-  signal spi_miso     : std_logic;
+  signal spi_m_o      : spi_master_o_t := SPI_MASTER_O_IDLE;
+  signal spi_m_i      : spi_master_i_t := SPI_MASTER_I_IDLE;
 begin
   clk <= not clk after 5 ns;
-  spi_miso <= spi_mosi;
+  spi_m_i <= spi_master_i(spi_m_o.mosi);
 
   dut : entity radif.radif_reg_to_spi_master
     generic map (
@@ -51,10 +50,10 @@ begin
       reg_wr_valid => reg_wr_valid,
       reg_rd_valid => reg_rd_valid,
       reg_error => reg_error,
-      spi_sclk_o => spi_sclk,
-      spi_cs_n_o => spi_cs_n,
-      spi_mosi_o => spi_mosi,
-      spi_miso_i => spi_miso
+      spi_sclk_o => spi_m_o.sclk,
+      spi_cs_n_o => spi_m_o.cs_n,
+      spi_mosi_o => spi_m_o.mosi,
+      spi_miso_i => spi_m_i.miso
     );
 
   process
@@ -88,13 +87,13 @@ begin
 
     for i in 0 to 80 loop
       wait until rising_edge(clk);
-      exit when spi_cs_n = '0';
+      exit when spi_m_o.cs_n = '0';
     end loop;
-    assert spi_cs_n = '0' report "SPI chip select did not assert" severity failure;
+    assert spi_m_o.cs_n = '0' report "SPI chip select did not assert" severity failure;
 
     for i in 0 to 120 loop
       wait until rising_edge(clk);
-      exit when spi_cs_n = '1';
+      exit when spi_m_o.cs_n = '1';
     end loop;
 
     reg_read(x"0004");

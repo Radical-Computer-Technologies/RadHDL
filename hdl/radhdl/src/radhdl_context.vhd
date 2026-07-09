@@ -4,6 +4,9 @@ context radhdl_context is
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
   library radhdl;
+  use radhdl.radhdl_axi_pkg.all;
+  use radhdl.radhdl_axis_pkg.all;
+  use radhdl.radhdl_spi_pkg.all;
   use radhdl.dsp.all;
   use radhdl.interfaces.all;
   use radhdl.debug.all;

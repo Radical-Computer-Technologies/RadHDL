@@ -1,0 +1,48 @@
+{
+  "schema": "radhdl.core_synth_matrix.v1",
+  "targets": [
+    {
+      "id": "zynq_7020",
+      "part": "xc7z020clg400-1",
+      "clock_period_ns": 10.0
+    },
+    {
+      "id": "zynq_usplus_zu3eg",
+      "part": "xczu3eg-sfvc784-1-e",
+      "clock_period_ns": 6.667
+    }
+  ],
+  "cores": [
+    {
+      "module": "radif_gpio_reg_block",
+      "library": "radif",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_gpio_reg_block.vhd"
+      ]
+    },
+    {
+      "module": "radif_irq_controller",
+      "library": "radif",
+      "clock_port": "clk",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_irq_controller.vhd"
+      ]
+    },
+    {
+      "module": "raddsp_axis_gain",
+      "library": "work",
+      "clock_port": "clk",
+      "sources": [
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_gain.vhd"
+      ],
+      "target_generics": {
+        "zynq_usplus_zu3eg": {
+          "DEVICE_FAMILY": "ultrascaleplus"
+        }
+      }
+    }
+  ]
+}

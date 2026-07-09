@@ -23,6 +23,11 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT hdl radhdl src debug_context.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src radhdl_context.vhd] \
     ]
+    variable COMMON_PROTOCOL_FILES [list \
+        [file join $::RadHDL::ROOT common hdl src radhdl_axi_pkg.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_axis_pkg.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_spi_pkg.vhd] \
+    ]
     variable DEBUG_RADILA_FILES [list \
         [file join $::RadHDL::ROOT debug radila hdl radila radila_core.vhd] \
         [file join $::RadHDL::ROOT debug radila hdl radila raddebughub.vhd] \
@@ -114,6 +119,7 @@ namespace eval ::RadHDL {
     proc files {library} {
         variable DEBUG_RADILA_FILES
         variable RADHDL_API_FILES
+        variable COMMON_PROTOCOL_FILES
         variable DSP_RADDSP_RAW_FILES
         variable DSP_RADDSP_XCI_FILES
         variable DSP_RADDSP_XCI_VHDL_FILES
@@ -121,18 +127,20 @@ namespace eval ::RadHDL {
 
         switch -- $library {
             radhdl.api { return $RADHDL_API_FILES }
-            radhdl.all { return [concat $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
-            all { return [concat $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
+            radhdl.protocol { return $COMMON_PROTOCOL_FILES }
+            protocol { return $COMMON_PROTOCOL_FILES }
+            radhdl.all { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
+            all { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
             debug.radila { return $DEBUG_RADILA_FILES }
             debug { return $DEBUG_RADILA_FILES }
-            dsp.raddsp.raw { return $DSP_RADDSP_RAW_FILES }
-            dsp.raw { return $DSP_RADDSP_RAW_FILES }
+            dsp.raddsp.raw { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }
+            dsp.raw { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }
             dsp.raddsp.xci { return $DSP_RADDSP_XCI_FILES }
             dsp.xci { return $DSP_RADDSP_XCI_FILES }
             dsp.raddsp.xci_vhdl { return $DSP_RADDSP_XCI_VHDL_FILES }
             dsp.xci_vhdl { return $DSP_RADDSP_XCI_VHDL_FILES }
-            interfaces.radif { return $INTERFACES_RADIF_FILES }
-            interfaces { return $INTERFACES_RADIF_FILES }
+            interfaces.radif { return [concat $COMMON_PROTOCOL_FILES $INTERFACES_RADIF_FILES] }
+            interfaces { return [concat $COMMON_PROTOCOL_FILES $INTERFACES_RADIF_FILES] }
             default { error "unknown RadHDL library '$library'" }
         }
     }

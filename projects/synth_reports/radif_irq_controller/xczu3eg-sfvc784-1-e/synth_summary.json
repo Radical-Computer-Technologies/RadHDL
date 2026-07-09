@@ -1,0 +1,54 @@
+{
+  "clock": {
+    "frequency_mhz": 149.993,
+    "period_ns": 6.667,
+    "port": "clk"
+  },
+  "library": "radif",
+  "metrics": {
+    "timing": {
+      "hold_ths_ns": -2.691,
+      "hold_whs_ns": -0.068,
+      "setup_tns_ns": 0.0,
+      "setup_wns_ns": 5.602
+    },
+    "utilization": {
+      "bonded_iob": 106,
+      "bonded_iob_available": "252",
+      "bonded_iob_util_percent": "42.06",
+      "bram_tiles": 0,
+      "bram_tiles_available": "216",
+      "bram_tiles_util_percent": "0.00",
+      "dsps": 0,
+      "dsps_available": "360",
+      "dsps_util_percent": "0.00",
+      "ramb18": 0,
+      "ramb18_available": "432",
+      "ramb18_util_percent": "0.00",
+      "ramb36_fifo": 0,
+      "ramb36_fifo_available": "216",
+      "ramb36_fifo_util_percent": "0.00",
+      "slice_luts": 48,
+      "slice_luts_available": "70560",
+      "slice_luts_util_percent": "0.07",
+      "slice_registers": 99,
+      "slice_registers_available": "141120",
+      "slice_registers_util_percent": "0.07"
+    }
+  },
+  "module": "radif_irq_controller",
+  "out_dir": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_irq_controller",
+  "part": "xczu3eg-sfvc784-1-e",
+  "reports": {
+    "timing_summary": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_irq_controller/timing_summary.rpt",
+    "utilization": "/media/jvincent/Kingspec512/repos/RadHDL/.radmeta/hdl-synth/radif_irq_controller/utilization.rpt"
+  },
+  "returncode": 0,
+  "schema": "radhdl.synth_summary.v1",
+  "sources": [
+    "/media/jvincent/Kingspec512/repos/RadHDL/interfaces/hdl/radif/src/radif_irq_controller.vhd"
+  ],
+  "status": "ok",
+  "tool": "vivado",
+  "top": "radif_irq_controller"
+}
