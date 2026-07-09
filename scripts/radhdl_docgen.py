@@ -1748,7 +1748,7 @@ def waveform_script() -> str:
       });
       ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textBaseline = "middle";
-      const minTickSpacing = valueX >= 2.8 ? 38 : valueX >= 1.7 ? 54 : 88;
+      const minTickSpacing = valueX >= 8 ? 28 : valueX >= 4 ? 34 : valueX >= 2.8 ? 42 : valueX >= 1.7 ? 54 : 88;
       let lastTickX = -Infinity;
       ticks.forEach((tick, index) => {
         const x = (Number(tick.time || 0) / endTime) * plotWidth;
@@ -1990,7 +1990,7 @@ def render_waveform_canvas(
         f"<h4>{html.escape(title)}</h4>"
         f"{source_html}"
         '<div class="wave-controls">'
-        '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="420" value="100"></label>'
+        '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="1600" value="100"></label>'
         '<label>Vertical <input class="wave-zoom-y" type="range" min="70" max="260" value="100"></label>'
         "</div>"
         + '<div class="wave-viewport">'
