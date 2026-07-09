@@ -8,22 +8,34 @@ package dsp_comms is
   component raddsp_axis_am_iq_modulator is
     generic (
       -- Sample width for envelope, carrier, and I/Q output lanes.
-      SAMPLE_WIDTH : positive := 16;
+      SAMPLE_WIDTH         : positive := 16;
       -- Number of fractional bits used by carrier and envelope fixed-point values.
-      FRAC_BITS    : natural := 14;
+      FRAC_BITS            : natural := 14;
+      -- Internal DDS phase accumulator width. The register interface supports up to 32 bits.
+      PHASE_WIDTH          : positive := 32;
+      -- Width of the RADIF register data path.
+      REG_DATA_WIDTH       : positive := 32;
+      -- Width of the RADIF byte address path.
+      REG_ADDR_WIDTH       : positive := 16;
+      -- Reset value for carrier phase increment.
+      DEFAULT_PHASE_INC    : natural := 16#01000000#;
+      -- Reset value for internal DDS carrier selection.
+      DEFAULT_INTERNAL_DDS : boolean := true;
+      -- Reset value for stream processing enable.
+      DEFAULT_ENABLE       : boolean := true;
       -- Vendor selector retained for generated package consistency.
-      VENDOR       : string := "GENERIC";
+      VENDOR               : string := "GENERIC";
       -- Device-family selector retained for generated package consistency.
-      DEVICE_FAMILY: string := "GENERIC"
+      DEVICE_FAMILY        : string := "GENERIC"
     );
     port (
-      -- Stream clock.
+      -- Stream and register clock.
       clk             : in  std_logic;
       -- Active-high synchronous reset.
       rst             : in  std_logic;
-      -- Signed fixed-point carrier cosine sample.
+      -- Signed fixed-point external carrier cosine sample.
       carrier_i_i     : in  std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
-      -- Signed fixed-point carrier sine sample.
+      -- Signed fixed-point external carrier sine sample.
       carrier_q_i     : in  std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
       -- Envelope stream valid.
       s_axis_tvalid   : in  std_logic;
@@ -40,7 +52,29 @@ package dsp_comms is
       -- Packed I/Q output, I in bits SAMPLE_WIDTH-1:0 and Q above it.
       m_axis_tdata    : out std_logic_vector((2 * SAMPLE_WIDTH) - 1 downto 0);
       -- Output frame marker aligned with output sample.
-      m_axis_tlast    : out std_logic
+      m_axis_tlast    : out std_logic;
+      -- Register write address.
+      reg_wr_addr     : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- Register read address.
+      reg_rd_addr     : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- One-cycle register write request.
+      reg_wr_en       : in  std_logic;
+      -- One-cycle register read request.
+      reg_rd_en       : in  std_logic;
+      -- Register write data.
+      reg_data_in     : in  std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register read data.
+      reg_data_out    : out std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register write ready.
+      reg_wr_rdy      : out std_logic;
+      -- Register read ready.
+      reg_rd_rdy      : out std_logic;
+      -- Register write response valid.
+      reg_wr_valid    : out std_logic;
+      -- Register read response valid.
+      reg_rd_valid    : out std_logic;
+      -- Register transaction error.
+      reg_error       : out std_logic
     );
   end component;
 
@@ -48,14 +82,28 @@ package dsp_comms is
   component raddsp_axis_am_iq_demodulator is
     generic (
       -- Signed I/Q sample width.
-      SAMPLE_WIDTH : positive := 16;
+      SAMPLE_WIDTH         : positive := 16;
+      -- Number of fractional bits used by carrier and I/Q fixed-point values.
+      FRAC_BITS            : natural := 14;
+      -- Internal DDS phase accumulator width. The register interface supports up to 32 bits.
+      PHASE_WIDTH          : positive := 32;
+      -- Width of the RADIF register data path.
+      REG_DATA_WIDTH       : positive := 32;
+      -- Width of the RADIF byte address path.
+      REG_ADDR_WIDTH       : positive := 16;
+      -- Reset value for carrier phase increment.
+      DEFAULT_PHASE_INC    : natural := 16#01000000#;
+      -- Reset value for internal carrier-rotation selection.
+      DEFAULT_INTERNAL_DDS : boolean := true;
+      -- Reset value for stream processing enable.
+      DEFAULT_ENABLE       : boolean := true;
       -- Vendor selector retained for generated package consistency.
-      VENDOR       : string := "GENERIC";
+      VENDOR               : string := "GENERIC";
       -- Device-family selector retained for generated package consistency.
-      DEVICE_FAMILY: string := "GENERIC"
+      DEVICE_FAMILY        : string := "GENERIC"
     );
     port (
-      -- Stream clock.
+      -- Stream and register clock.
       clk             : in  std_logic;
       -- Active-high synchronous reset.
       rst             : in  std_logic;
@@ -74,7 +122,29 @@ package dsp_comms is
       -- Unsigned envelope magnitude in SAMPLE_WIDTH bits.
       m_axis_tdata    : out std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
       -- Output frame marker aligned with envelope sample.
-      m_axis_tlast    : out std_logic
+      m_axis_tlast    : out std_logic;
+      -- Register write address.
+      reg_wr_addr     : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- Register read address.
+      reg_rd_addr     : in  std_logic_vector(REG_ADDR_WIDTH - 1 downto 0);
+      -- One-cycle register write request.
+      reg_wr_en       : in  std_logic;
+      -- One-cycle register read request.
+      reg_rd_en       : in  std_logic;
+      -- Register write data.
+      reg_data_in     : in  std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register read data.
+      reg_data_out    : out std_logic_vector(REG_DATA_WIDTH - 1 downto 0);
+      -- Register write ready.
+      reg_wr_rdy      : out std_logic;
+      -- Register read ready.
+      reg_rd_rdy      : out std_logic;
+      -- Register write response valid.
+      reg_wr_valid    : out std_logic;
+      -- Register read response valid.
+      reg_rd_valid    : out std_logic;
+      -- Register transaction error.
+      reg_error       : out std_logic
     );
   end component;
 

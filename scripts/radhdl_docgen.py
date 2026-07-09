@@ -812,6 +812,12 @@ def package_group(module: ModuleDoc) -> str:
     return source_package_group(module)
 
 
+def collector_group(module: ModuleDoc) -> str:
+    if module.category == "Debug":
+        return "raddebug"
+    return source_package_group(module)
+
+
 def module_doc_slug(module: ModuleDoc) -> str:
     return module_slug(f"{package_group(module)}__{source_package_group(module)}__{module.name}")
 
@@ -939,7 +945,10 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave-controls label {{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }}
 .wave-controls input {{ width: 180px; accent-color: var(--accent); }}
 .wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
-.wave svg {{ display: block; width: 1120px; max-width: none; height: var(--wave-height); }}
+.wave-canvas {{ display: flex; align-items: flex-start; min-width: max-content; }}
+.wave-labels {{ position: sticky; left: 0; z-index: 2; flex: 0 0 190px; width: 190px; max-width: none; height: var(--wave-height); background: var(--card); border-right: 1px solid var(--line); }}
+.wave-plot {{ flex: 0 0 var(--wave-plot-width, 894px); width: var(--wave-plot-width, 894px); min-width: var(--wave-plot-width, 894px); }}
+.waveform {{ display: block; width: 100%; max-width: none; height: var(--wave-height); background: var(--card); }}
 .wave-axis {{ stroke: var(--line); stroke-width: 1; }}
 .wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
 .wave-grid.clock-grid {{ opacity: .45; }}
@@ -957,6 +966,15 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave-group {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 10px 0; }}
 .wave-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
 .wave-group-body {{ padding: 0 10px 10px; }}
+.plot-card {{ border: 1px solid var(--line); border-radius: 6px; background: var(--soft); padding: 10px; margin: 12px 0; }}
+.plot-card h4 {{ margin: 0 0 6px; }}
+.plot-viewport {{ overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--card); }}
+.plot-svg {{ display: block; min-width: 820px; width: 100%; height: auto; }}
+.plot-grid {{ stroke: var(--line); stroke-width: 1; opacity: .55; }}
+.plot-axis {{ stroke: var(--muted); stroke-width: 1.2; }}
+.plot-label {{ fill: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.plot-title {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }}
+.plot-line {{ fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
 nav.breadcrumb {{ font-size: 13px; color: var(--muted); margin-bottom: 14px; }}
 footer {{ margin-top: 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }}
 """.strip()
@@ -1642,28 +1660,40 @@ def waveform_script() -> str:
     wave.dataset.ready = "1";
     const zoomX = wave.querySelector(".wave-zoom-x");
     const zoomY = wave.querySelector(".wave-zoom-y");
+    const plotPane = wave.querySelector(".wave-plot");
     const svg = wave.querySelector("svg.waveform");
+    const labelSvg = wave.querySelector("svg.wave-labels");
     const hover = wave.querySelector(".wave-hover-line");
     const hoverLabel = wave.querySelector(".wave-hover-label");
     const labels = Array.from(wave.querySelectorAll(".wave-time"));
     const grids = Array.from(wave.querySelectorAll(".wave-grid"));
     const clockGrids = grids.filter((grid) => grid.dataset.clock === "1");
     const snapGrids = clockGrids.length ? clockGrids : grids;
-    const baseWidth = svg && svg.viewBox && svg.viewBox.baseVal ? Number(svg.viewBox.baseVal.width || 1120) : 1120;
+    const plotWidth = svg ? Number(svg.dataset.plotWidth || 894) : 894;
     const baseHeight = svg && svg.viewBox && svg.viewBox.baseVal ? Number(svg.viewBox.baseVal.height || 320) : 320;
     const setZoom = () => {
       const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
       const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
       wave.style.setProperty("--wave-zoom-x", String(valueX));
       wave.style.setProperty("--wave-zoom-y", String(valueY));
+      const scaledWidth = `${plotWidth * valueX}px`;
+      wave.style.setProperty("--wave-plot-width", scaledWidth);
+      if (plotPane) {
+        plotPane.style.width = scaledWidth;
+        plotPane.style.minWidth = scaledWidth;
+        plotPane.style.flexBasis = scaledWidth;
+      }
       if (svg) {
-        svg.style.width = `${baseWidth * valueX}px`;
+        svg.style.width = "100%";
         svg.style.height = `${baseHeight * valueY}px`;
+      }
+      if (labelSvg) {
+        labelSvg.style.height = `${baseHeight * valueY}px`;
       }
       const minSpacing = valueX >= 2.5 ? 38 : valueX >= 1.6 ? 52 : 78;
       let lastShown = -Infinity;
       labels.forEach((label) => {
-        const x = Number(label.getAttribute("x") || "0") * valueX;
+        const x = Number(label.dataset.x || label.getAttribute("x") || "0") * valueX;
         if (x - lastShown >= minSpacing) {
           label.style.display = "";
           lastShown = x;
@@ -1772,35 +1802,36 @@ def render_waveform_svg(
     ticks, clock_based = waveform_grid_times(grid_signals or selected, end_time)
     grid_class = "wave-grid clock-grid" if clock_based else "wave-grid fallback-grid"
     for tick_index, time_value in enumerate(ticks):
-        x = label_width + (time_value / end_time) * plot_width
+        x = (time_value / end_time) * plot_width
         tick_label = f"C{tick_index}" if clock_based else str(time_value)
         hover_label = f"cycle {tick_index}" if clock_based else f"t={time_value}"
         grid.append(
             f'<line class="{grid_class}" data-clock="{1 if clock_based else 0}" data-x="{x:.1f}" data-time="{time_value}" data-label="{html.escape(hover_label)}" '
             f'x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />'
         )
-        grid.append(f'<text class="wave-time" data-tick="{tick_index}" x="{x + 3:.1f}" y="15">{html.escape(tick_label)}</text>')
-    rows = []
+        grid.append(f'<text class="wave-time" data-tick="{tick_index}" data-x="{x + 3:.1f}" x="{x + 3:.1f}" y="15">{html.escape(tick_label)}</text>')
+    label_rows = []
+    plot_rows = []
     for index, signal in enumerate(selected):
         row_y = top + index * row_height
         trace_y = row_y + 4
         label = str(signal["name"])
-        rows.append(f'<text class="wave-label" x="8" y="{row_y + 18}">{html.escape(label)}</text>')
-        rows.append(f'<line class="wave-axis" x1="{label_width}" y1="{trace_y + trace_height}" x2="{label_width + plot_width}" y2="{trace_y + trace_height}" />')
+        label_rows.append(f'<text class="wave-label" x="8" y="{row_y + 18}">{html.escape(label)}</text>')
+        plot_rows.append(f'<line class="wave-axis" x1="0" y1="{trace_y + trace_height}" x2="{plot_width}" y2="{trace_y + trace_height}" />')
         samples = signal["samples"]
         if signal.get("kind") == "interface":
-            rows.append(f'<rect class="wave-interface" x="{label_width}" y="{trace_y - 1}" width="{plot_width}" height="{trace_height + 2}" rx="4" />')
-            rows.append(
-                f'<text class="wave-interface-text" x="{label_width + 8}" y="{trace_y + 12}">'
+            plot_rows.append(f'<rect class="wave-interface" x="0" y="{trace_y - 1}" width="{plot_width}" height="{trace_height + 2}" rx="4" />')
+            plot_rows.append(
+                f'<text class="wave-interface-text" x="8" y="{trace_y + 12}">'
                 f'{html.escape(label)} interface ({int(signal.get("count", 0))} signals)</text>'
             )
         elif is_scalar_wave(samples):
-            path, unknown = scalar_wave_path(samples, end_time, label_width, plot_width, trace_y, trace_height)
+            path, unknown = scalar_wave_path(samples, end_time, 0, plot_width, trace_y, trace_height)
             if path:
                 css = "wave-trace wave-unknown" if unknown else "wave-trace"
-                rows.append(f'<path class="{css}" d="{path}" />')
+                plot_rows.append(f'<path class="{css}" d="{path}" />')
         else:
-            rows.append(render_bus_wave(samples, end_time, label_width, plot_width, trace_y, trace_height))
+            plot_rows.append(render_bus_wave(samples, end_time, 0, plot_width, trace_y, trace_height))
     source_html = f'<p class="meta">Source: {html.escape(source)}</p>' if source else ""
     return (
         '<div class="wave">'
@@ -1810,13 +1841,18 @@ def render_waveform_svg(
         '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="420" value="100"></label>'
         '<label>Vertical <input class="wave-zoom-y" type="range" min="70" max="260" value="100"></label>'
         "</div>"
-        '<div class="wave-viewport">'
-        f'<svg class="waveform" style="--wave-height:{height}px" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
+        f'<div class="wave-viewport" style="--wave-height:{height}px">'
+        + '<div class="wave-canvas">'
+        + f'<svg class="wave-labels" viewBox="0 0 {label_width} {height}" aria-hidden="true">'
+        + "".join(label_rows)
+        + "</svg>"
+        + f'<div class="wave-plot" style="--wave-plot-width:{plot_width}px">'
+        + f'<svg class="waveform" data-plot-width="{plot_width}" viewBox="0 0 {plot_width} {height}" role="img" aria-label="{html.escape(title)}">'
         + "".join(grid)
-        + "".join(rows)
-        + f'<line class="wave-hover-line" x1="{label_width}" y1="20" x2="{label_width}" y2="{height - 18}" />'
-        + f'<text class="wave-hover-label" x="{label_width + 4}" y="{height - 6}"></text>'
-        + "</svg></div>"
+        + "".join(plot_rows)
+        + f'<line class="wave-hover-line" x1="0" y1="20" x2="0" y2="{height - 18}" />'
+        + f'<text class="wave-hover-label" x="4" y="{height - 6}"></text>'
+        + "</svg></div></div></div>"
         + waveform_script()
         + "</div>"
     )
@@ -1834,6 +1870,10 @@ def render_waveform_viewer(signals: list[dict[str, Any]], title: str, source: st
             + "</div></details>"
         )
     return "".join(parts)
+
+
+def base_signal_name(name: str) -> str:
+    return re.sub(r"\[[^\]]+\]$", "", name).lower()
 
 
 def vcd_wave_signals(vcd_path: Path) -> list[dict[str, Any]]:
@@ -1862,7 +1902,7 @@ def vcd_wave_signals(vcd_path: Path) -> list[dict[str, Any]]:
                 value = value[1:]
             else:
                 value, code = line[0], line[1:]
-            if code in samples and len(samples[code]) < 768:
+            if code in samples and len(samples[code]) < 4096:
                 samples[code].append((current_time, value))
     wave_signals = []
     seen_names: set[str] = set()
@@ -1870,14 +1910,185 @@ def vcd_wave_signals(vcd_path: Path) -> list[dict[str, Any]]:
         if name in seen_names:
             continue
         seen_names.add(name)
-        signal_samples = compact_wave_samples(samples.get(code, []))
+        signal_samples = samples.get(code, [])
         if signal_samples:
             wave_signals.append({"name": name, "samples": signal_samples})
     return wave_signals
 
 
-def render_vcd_preview(vcd_path: Path, source: str) -> str:
-    return render_waveform_viewer(vcd_wave_signals(vcd_path), "Captured GHDL Waveform", source)
+def load_plot_directives(root: Path, source: str) -> list[dict[str, Any]]:
+    source_path = root / source
+    sidecar = source_path.with_suffix(".plots.json")
+    if not sidecar.exists():
+        return []
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    plots = data.get("plots", [])
+    if not isinstance(plots, list):
+        return []
+    return [plot for plot in plots if isinstance(plot, dict)]
+
+
+def wave_numeric_value(value: str, signed_value: bool) -> int | None:
+    normalized = normalize_wave_value(value).lower()
+    if not normalized or any(char not in "01" for char in normalized):
+        return None
+    raw = int(normalized, 2)
+    if signed_value and normalized[0] == "1":
+        raw -= 1 << len(normalized)
+    return raw
+
+
+def latest_wave_value(samples: list[tuple[int, str]], time_value: int) -> str | None:
+    latest: str | None = None
+    for sample_time, value in samples:
+        if sample_time > time_value:
+            break
+        latest = value
+    return latest
+
+
+def downsample_points(points: list[tuple[float, float]], max_points: int) -> list[tuple[float, float]]:
+    if max_points <= 0 or len(points) <= max_points:
+        return points
+    stride = max(1, len(points) // max_points)
+    selected = points[::stride]
+    if selected[-1] != points[-1]:
+        selected.append(points[-1])
+    return selected
+
+
+def render_plot_svg(plot: dict[str, Any], signals: list[dict[str, Any]]) -> str:
+    signal_map = {base_signal_name(str(signal.get("name", ""))): signal for signal in signals}
+    series_specs = [item for item in plot.get("series", []) if isinstance(item, dict)]
+    if not series_specs:
+        return ""
+    x_signal_name = base_signal_name(str(plot.get("x_signal", "")))
+    x_signal = signal_map.get(x_signal_name) if x_signal_name else None
+    if x_signal:
+        x_samples = x_signal.get("samples", [])
+    else:
+        first_signal = signal_map.get(base_signal_name(str(series_specs[0].get("signal", ""))))
+        x_samples = first_signal.get("samples", []) if first_signal else []
+    if not x_samples:
+        return ""
+
+    x_values: list[tuple[int, float]] = []
+    for index, (time_value, raw_value) in enumerate(x_samples):
+        if x_signal:
+            numeric = wave_numeric_value(raw_value, False)
+            if numeric is None:
+                continue
+            x_values.append((time_value, float(numeric)))
+        else:
+            x_values.append((time_value, float(index)))
+    if not x_values:
+        return ""
+
+    x_min = float(plot.get("x_min", min(value for _, value in x_values)))
+    x_max = float(plot.get("x_max", max(value for _, value in x_values)))
+    y_min = float(plot.get("y_min", 0))
+    y_max = float(plot.get("y_max", 1))
+    if x_max <= x_min:
+        x_max = x_min + 1.0
+    if y_max <= y_min:
+        y_max = y_min + 1.0
+
+    width = 980
+    height = 340
+    left = 74
+    right = 22
+    top = 26
+    bottom = 48
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    colors = ["#62d6c7", "#ffd84d", "#8bd3ff", "#f59eaa", "#c4b5fd", "#a7f3d0"]
+
+    def px(x_value: float) -> float:
+        return left + ((x_value - x_min) / (x_max - x_min)) * plot_width
+
+    def py(y_value: float) -> float:
+        clipped = max(y_min, min(y_max, y_value))
+        return top + (1.0 - ((clipped - y_min) / (y_max - y_min))) * plot_height
+
+    grid = []
+    for i in range(0, 6):
+        x = left + (plot_width * i / 5.0)
+        value = x_min + ((x_max - x_min) * i / 5.0)
+        grid.append(f'<line class="plot-grid" x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + plot_height}" />')
+        grid.append(f'<text class="plot-label" x="{x - 12:.1f}" y="{height - 18}">{value:.0f}</text>')
+    for i in range(0, 5):
+        y = top + (plot_height * i / 4.0)
+        value = y_max - ((y_max - y_min) * i / 4.0)
+        grid.append(f'<line class="plot-grid" x1="{left}" y1="{y:.1f}" x2="{left + plot_width}" y2="{y:.1f}" />')
+        grid.append(f'<text class="plot-label" x="8" y="{y + 4:.1f}">{value:.0f}</text>')
+
+    paths = []
+    legends = []
+    max_points = int(plot.get("max_points", 800) or 800)
+    for series_index, spec in enumerate(series_specs):
+        signal = signal_map.get(base_signal_name(str(spec.get("signal", ""))))
+        if not signal:
+            continue
+        samples = sorted(signal.get("samples", []), key=lambda item: item[0])
+        signed_value = bool(spec.get("signed", False))
+        points: list[tuple[float, float]] = []
+        for time_value, x_value in x_values:
+            if x_value < x_min or x_value > x_max:
+                continue
+            raw_value = latest_wave_value(samples, time_value)
+            if raw_value is None:
+                continue
+            y_value = wave_numeric_value(raw_value, signed_value)
+            if y_value is None:
+                continue
+            points.append((x_value, float(y_value)))
+        points = downsample_points(points, max_points)
+        if len(points) < 2:
+            continue
+        color = colors[series_index % len(colors)]
+        point_text = " ".join(f"{px(x):.1f},{py(y):.1f}" for x, y in points)
+        label = str(spec.get("label") or spec.get("signal") or f"Series {series_index + 1}")
+        paths.append(f'<polyline class="plot-line" points="{point_text}" stroke="{color}" />')
+        legend_y = top + 16 + (series_index * 18)
+        legends.append(f'<line x1="{left + 12}" y1="{legend_y}" x2="{left + 32}" y2="{legend_y}" stroke="{color}" stroke-width="3" />')
+        legends.append(f'<text class="plot-label" x="{left + 38}" y="{legend_y + 4}">{html.escape(label)}</text>')
+    if not paths:
+        return ""
+
+    title = str(plot.get("title") or "Data Plot")
+    description = str(plot.get("description") or "")
+    x_label = str(plot.get("x_label") or "X")
+    y_label = str(plot.get("y_label") or "Y")
+    return (
+        '<div class="plot-card">'
+        f"<h4>{html.escape(title)}</h4>"
+        f'{paragraph(description) if description else ""}'
+        '<div class="plot-viewport">'
+        f'<svg class="plot-svg" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
+        + "".join(grid)
+        + f'<line class="plot-axis" x1="{left}" y1="{top + plot_height}" x2="{left + plot_width}" y2="{top + plot_height}" />'
+        + f'<line class="plot-axis" x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_height}" />'
+        + f'<text class="plot-title" x="{left}" y="18">{html.escape(y_label)} vs {html.escape(x_label)}</text>'
+        + "".join(paths)
+        + "".join(legends)
+        + "</svg></div></div>"
+    )
+
+
+def render_directed_plots(root: Path, source: str, signals: list[dict[str, Any]]) -> str:
+    plots = [render_plot_svg(plot, signals) for plot in load_plot_directives(root, source)]
+    plots = [plot for plot in plots if plot]
+    if not plots:
+        return ""
+    return "<h4>Data Plots</h4>" + "".join(plots)
+
+
+def render_vcd_preview(vcd_path: Path, source: str, root: Path) -> str:
+    signals = vcd_wave_signals(vcd_path)
+    return render_directed_plots(root, source, signals) + render_waveform_viewer(signals, "Captured GHDL Waveform", source)
 
 
 def portable_timing_samples(name: str, data_type: str, index: int) -> list[tuple[int, str]]:
@@ -2141,7 +2352,7 @@ def render_testbenches(
             vcd_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / f"{module_slug(bench.name)}.vcd"
             artifact_links.append(f'<a href="{html.escape(str(vcd_path))}">vcd</a>')
         if status.get("vcd") and state == "passed":
-            waveform = render_vcd_preview(out / status["vcd"], bench.path)
+            waveform = render_vcd_preview(out / status["vcd"], bench.path, root)
         elif not run_sims:
             waveform = render_port_waveform_sketch(module, bench.path)
         else:
@@ -2241,8 +2452,9 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     preferred_categories = ["DSP", "Debug", "Interfaces"]
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
-    source_packages = sorted({source_package_group(module) for module in modules}, key=lambda item: item.lower())
+    collectors = sorted({collector_group(module) for module in modules}, key=lambda item: item.lower())
     subpackages = sorted({subpackage_group(module) for module in modules}, key=lambda item: item.lower())
+    collector_order = {"raddsp": 0, "radif": 1, "raddebug": 2}
     subpackage_order = {
         "dsp_comms": 0,
         "dsp_transform": 1,
@@ -2258,77 +2470,70 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
         "radif_uart": 15,
         "radif_regbank": 16,
         "radif_misc": 17,
+        "radila": 20,
     }
     category_options = "".join(f'<option value="{html.escape(category)}">{html.escape(category)}</option>' for category in categories)
+    collector_options = "".join(f'<option value="{html.escape(collector)}">{html.escape(collector)}</option>' for collector in collectors)
     subpackage_options = "".join(f'<option value="{html.escape(subpackage)}">{html.escape(subpackage)}</option>' for subpackage in subpackages)
-    source_package_options = "".join(f'<option value="{html.escape(package)}">{html.escape(package)}</option>' for package in source_packages)
     sections: list[str] = []
-    for category in categories:
-        category_modules = [module for module in modules if module.category == category]
-        category_subpackages = sorted(
-            {subpackage_group(module) for module in category_modules},
+    for collector in sorted(collectors, key=lambda item: (collector_order.get(item, 100), item.lower())):
+        collector_modules = [module for module in modules if collector_group(module) == collector]
+        collector_subpackages = sorted(
+            {subpackage_group(module) for module in collector_modules},
             key=lambda item: (subpackage_order.get(item, 100), item.lower()),
         )
         subpackage_sections: list[str] = []
-        for subpackage in category_subpackages:
-            subpackage_modules = [module for module in category_modules if subpackage_group(module) == subpackage]
-            packages = sorted({source_package_group(module) for module in subpackage_modules}, key=lambda item: item.lower())
-            package_sections: list[str] = []
-            for source_package in packages:
-                package_modules = sorted(
-                    [module for module in subpackage_modules if source_package_group(module) == source_package],
-                    key=lambda item: item.name.lower(),
-                )
-                rows = []
-                for module in package_modules:
-                    regs = register_count(module)
-                    register_meta = f" / {regs} registers" if regs else ""
-                    has_testbench = bool(module.testbenches)
-                    has_waveform = any(bench.simulation.get("vcd") for bench in module.testbenches)
-                    has_axi = any("AXI" in port.name.upper() or "AXIS" in port.name.upper() for port in module.ports)
-                    has_generics = bool(module.generics)
-                    module_subpackage = subpackage_group(module)
-                    search_text = " ".join(
-                        [
-                            module.name,
-                            module.library,
-                            module.category,
-                            module_subpackage,
-                            source_package,
-                            module.description.splitlines()[0] if module.description else "",
-                            register_search_text(module),
-                        ]
-                    ).lower()
-                    rows.append(
-                        '<div class="datasheet-link-row" '
-                        f'data-datasheet-item data-search="{html.escape(search_text)}" '
-                        f'data-category="{html.escape(module.category)}" '
-                        f'data-subpackage="{html.escape(module_subpackage)}" '
-                        f'data-source-package="{html.escape(source_package)}" '
-                        f'data-has-register-map="{str(bool(regs)).lower()}" '
-                        f'data-has-testbench="{str(has_testbench).lower()}" '
-                        f'data-has-waveform="{str(has_waveform).lower()}" '
-                        f'data-has-axi="{str(has_axi).lower()}" '
-                        f'data-has-generics="{str(has_generics).lower()}">'
-                        f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
-                        f'<span class="meta">{html.escape(module_subpackage)} / {html.escape(source_package)} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
-                        "</div>"
-                    )
-                package_sections.append(
-                    f'<details class="package-group" data-source-package-group>'
-                    f'<summary>{html.escape(source_package)} <span class="meta">{len(package_modules)} datasheets</span></summary>'
-                    f'<div class="datasheet-list">{"".join(rows)}</div>'
-                    "</details>"
+        for subpackage in collector_subpackages:
+            subpackage_modules = sorted(
+                [module for module in collector_modules if subpackage_group(module) == subpackage],
+                key=lambda item: item.name.lower(),
+            )
+            rows = []
+            for module in subpackage_modules:
+                regs = register_count(module)
+                register_meta = f" / {regs} registers" if regs else ""
+                has_testbench = bool(module.testbenches)
+                has_waveform = any(bench.simulation.get("vcd") for bench in module.testbenches)
+                has_axi = any("AXI" in port.name.upper() or "AXIS" in port.name.upper() for port in module.ports)
+                has_generics = bool(module.generics)
+                module_subpackage = subpackage_group(module)
+                module_collector = collector_group(module)
+                search_text = " ".join(
+                    [
+                        module.name,
+                        module.library,
+                        module.category,
+                        module_collector,
+                        module_subpackage,
+                        source_package_group(module),
+                        module.description.splitlines()[0] if module.description else "",
+                        register_search_text(module),
+                    ]
+                ).lower()
+                rows.append(
+                    '<div class="datasheet-link-row" '
+                    f'data-datasheet-item data-search="{html.escape(search_text)}" '
+                    f'data-category="{html.escape(module.category)}" '
+                    f'data-collector="{html.escape(module_collector)}" '
+                    f'data-subpackage="{html.escape(module_subpackage)}" '
+                    f'data-has-register-map="{str(bool(regs)).lower()}" '
+                    f'data-has-testbench="{str(has_testbench).lower()}" '
+                    f'data-has-waveform="{str(has_waveform).lower()}" '
+                    f'data-has-axi="{str(has_axi).lower()}" '
+                    f'data-has-generics="{str(has_generics).lower()}">'
+                    f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
+                    f'<span class="meta">{html.escape(module.category)} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
+                    "</div>"
                 )
             subpackage_sections.append(
                 f'<details class="subpackage-group" data-subpackage-group>'
                 f'<summary>{html.escape(subpackage)} <span class="meta">{len(subpackage_modules)} datasheets</span></summary>'
-                f'{"".join(package_sections)}'
+                f'<div class="datasheet-list">{"".join(rows)}</div>'
                 "</details>"
             )
         sections.append(
             f'<details class="datasheet-section" data-datasheet-section>'
-            f'<summary>{html.escape(category)} <span class="meta">{len(category_modules)} datasheets</span></summary>'
+            f'<summary>{html.escape(collector)} <span class="meta">{len(collector_modules)} datasheets</span></summary>'
             f'{"".join(subpackage_sections)}'
             "</details>"
         )
@@ -2337,34 +2542,30 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
 (() => {
   const input = document.querySelector("[data-datasheet-search]");
   const category = document.querySelector("[data-filter-category]");
+  const collector = document.querySelector("[data-filter-collector]");
   const subpackage = document.querySelector("[data-filter-subpackage]");
-  const sourcePackage = document.querySelector("[data-filter-source-package]");
   const checks = Array.from(document.querySelectorAll("[data-filter-flag]"));
   const empty = document.querySelector("[data-datasheet-empty]");
   if (!input) return;
   const apply = () => {
     const query = input.value.trim().toLowerCase();
     const selectedCategory = category ? category.value : "";
+    const selectedCollector = collector ? collector.value : "";
     const selectedSubpackage = subpackage ? subpackage.value : "";
-    const selectedSourcePackage = sourcePackage ? sourcePackage.value : "";
     const activeFlags = checks.filter((check) => check.checked).map((check) => check.dataset.filterFlag);
     let visibleCount = 0;
     document.querySelectorAll("[data-datasheet-item]").forEach((row) => {
       const matchesQuery = !query || row.dataset.search.includes(query);
       const matchesCategory = !selectedCategory || row.dataset.category === selectedCategory;
+      const matchesCollector = !selectedCollector || row.dataset.collector === selectedCollector;
       const matchesSubpackage = !selectedSubpackage || row.dataset.subpackage === selectedSubpackage;
-      const matchesSourcePackage = !selectedSourcePackage || row.dataset.sourcePackage === selectedSourcePackage;
       const matchesFlags = activeFlags.every((flag) => row.dataset[flag] === "true");
-      row.hidden = !(matchesQuery && matchesCategory && matchesSubpackage && matchesSourcePackage && matchesFlags);
+      row.hidden = !(matchesQuery && matchesCategory && matchesCollector && matchesSubpackage && matchesFlags);
       if (!row.hidden) visibleCount += 1;
     });
-    const hasFilters = Boolean(query || selectedCategory || selectedSubpackage || selectedSourcePackage || activeFlags.length);
-    document.querySelectorAll("[data-source-package-group]").forEach((group) => {
-      group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
-      if (hasFilters && !group.hidden) group.open = true;
-    });
+    const hasFilters = Boolean(query || selectedCategory || selectedCollector || selectedSubpackage || activeFlags.length);
     document.querySelectorAll("[data-subpackage-group]").forEach((group) => {
-      group.hidden = !group.querySelector("[data-source-package-group]:not([hidden])");
+      group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
       if (hasFilters && !group.hidden) group.open = true;
     });
     document.querySelectorAll("[data-datasheet-section]").forEach((section) => {
@@ -2375,8 +2576,8 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
   };
   input.addEventListener("input", apply);
   if (category) category.addEventListener("change", apply);
+  if (collector) collector.addEventListener("change", apply);
   if (subpackage) subpackage.addEventListener("change", apply);
-  if (sourcePackage) sourcePackage.addEventListener("change", apply);
   checks.forEach((check) => check.addEventListener("change", apply));
   apply();
 })();
@@ -2386,9 +2587,9 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
         '<section class="datasheet-browser">'
         '<div class="datasheet-controls">'
         '<label class="filter-label">Search<input class="datasheet-search" type="search" data-datasheet-search placeholder="Search datasheets"></label>'
-        f'<label class="filter-label">Library<select class="datasheet-select" data-filter-category><option value="">All libraries</option>{category_options}</select></label>'
+        f'<label class="filter-label">Package<select class="datasheet-select" data-filter-collector><option value="">All packages</option>{collector_options}</select></label>'
         f'<label class="filter-label">Subpackage<select class="datasheet-select" data-filter-subpackage><option value="">All subpackages</option>{subpackage_options}</select></label>'
-        f'<label class="filter-label">Source package<select class="datasheet-select" data-filter-source-package><option value="">All packages</option>{source_package_options}</select></label>'
+        f'<label class="filter-label">Area<select class="datasheet-select" data-filter-category><option value="">All areas</option>{category_options}</select></label>'
         "</div>"
         '<div class="filter-checks" aria-label="Datasheet filters">'
         '<label><input type="checkbox" data-filter-flag="hasRegisterMap">Has Register Map</label>'

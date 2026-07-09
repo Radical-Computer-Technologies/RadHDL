@@ -1,0 +1,132 @@
+{
+  "name": "raddsp_axis_am_iq_demodulator",
+  "description": "Register map for the AM IQ demodulator internal carrier-rotation DDS and stream control.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "raddsp_axis_am_iq_demodulator",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Controls tuned I/Q carrier rotation, envelope detection, and sample-count observation.",
+      "registers": [
+        {
+          "name": "control",
+          "offset": "0x0000",
+          "access": "rw",
+          "reset": "0x00000003",
+          "description": "Controls stream processing and carrier-rotation source selection.",
+          "fields": [
+            {
+              "name": "enable",
+              "display_name": "EN",
+              "bits": "0",
+              "description": "Enables stream processing. When clear, accepted input samples are dropped and no output samples are emitted."
+            },
+            {
+              "name": "internal_dds",
+              "display_name": "INT DDS",
+              "bits": "1",
+              "description": "Enables internal DDS carrier rotation before envelope magnitude calculation."
+            },
+            {
+              "name": "bypass",
+              "display_name": "BYPASS",
+              "bits": "2",
+              "description": "Bypasses carrier rotation and computes magnitude directly from the incoming I/Q sample."
+            },
+            {
+              "name": "phase_reset",
+              "display_name": "PH RST",
+              "bits": "3",
+              "description": "Write-one strobe that clears the internal DDS phase accumulator."
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "offset": "0x0004",
+          "access": "ro",
+          "reset": "0x00000002",
+          "description": "Reports output-valid and input-ready status.",
+          "fields": [
+            {
+              "name": "out_valid",
+              "display_name": "VALID",
+              "bits": "0",
+              "description": "Set when an output envelope sample is currently valid."
+            },
+            {
+              "name": "input_ready",
+              "display_name": "READY",
+              "bits": "1",
+              "description": "Set when the block can accept an input I/Q sample."
+            }
+          ]
+        },
+        {
+          "name": "phase_inc",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "0x01000000",
+          "description": "Internal DDS phase increment applied after each accepted sample.",
+          "fields": [
+            {
+              "name": "phase_inc",
+              "display_name": "PH INC",
+              "bits": "31:0",
+              "description": "Unsigned phase tuning word. Larger values increase the demodulator rotation frequency; one full accumulator wrap equals one carrier cycle."
+            }
+          ]
+        },
+        {
+          "name": "phase_offset",
+          "offset": "0x000C",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Static phase offset added to the accumulator before carrier-rotation lookup.",
+          "fields": [
+            {
+              "name": "phase_offset",
+              "display_name": "PH OFFS",
+              "bits": "31:0",
+              "description": "Unsigned phase offset added to the DDS accumulator before demodulator sine/cosine lookup."
+            }
+          ]
+        },
+        {
+          "name": "phase",
+          "offset": "0x0010",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Current internal DDS phase accumulator value.",
+          "fields": [
+            {
+              "name": "phase",
+              "display_name": "PHASE",
+              "bits": "31:0",
+              "description": "Current unsigned DDS phase accumulator value."
+            }
+          ]
+        },
+        {
+          "name": "sample_count",
+          "offset": "0x0014",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Counts accepted and emitted samples. Write bit 0 as one to clear the counter.",
+          "fields": [
+            {
+              "name": "sample_count",
+              "display_name": "COUNT",
+              "bits": "31:0",
+              "description": "Current emitted-sample count. Writing bit 0 as one clears the counter."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
