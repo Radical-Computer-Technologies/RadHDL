@@ -781,17 +781,29 @@ def interface_include_package(module: ModuleDoc) -> str:
     name = module.name.lower()
     if "i2s" in name:
         return "interfaces_i2s"
+    if "uart" in name:
+        return "interfaces_uart"
     if "i2c" in name:
         return "interfaces_i2c"
     if "smi" in name:
         return "interfaces_smi"
     if "spi" in name or "qspi" in name:
         return "interfaces_spi"
-    if "reg_bank" in name or "reg_interconnect" in name:
+    if "gpio" in name or "irq" in name or "reg_bank" in name or "reg_interconnect" in name:
         return "interfaces_regbank"
     if "axi" in name or "axis" in name:
         return "interfaces_axi"
     return "interfaces"
+
+
+def subpackage_group(module: ModuleDoc) -> str:
+    if module.category == "DSP":
+        return f"dsp_{dsp_package_group(module).lower()}"
+    if module.category == "Interfaces":
+        interface_package = interface_include_package(module)
+        suffix = interface_package.removeprefix("interfaces_")
+        return "radif_misc" if suffix == "interfaces" else f"radif_{suffix}"
+    return source_package_group(module)
 
 
 def package_group(module: ModuleDoc) -> str:
@@ -849,12 +861,12 @@ def docs_version(out: Path) -> str:
 
 def write_css(out: Path, theme: str = "dark") -> None:
     if theme == "light":
-        theme_vars = ":root { color-scheme: light; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; }"
+        theme_vars = ":root { color-scheme: light; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; --logo-filter: none; }"
     elif theme == "auto":
-        theme_vars = """:root { color-scheme: light dark; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; } }"""
+        theme_vars = """:root { color-scheme: light dark; --bg: #ffffff; --ink: #111827; --muted: #5b6472; --line: #d8dee8; --panel: #f7f9fc; --card: #ffffff; --accent: #106b62; --link: #075e82; --code: #102033; --soft: #fbfcfe; --reserved: #f3f5f8; --ruler: #f7f9fc; --logo-filter: none; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; --logo-filter: invert(1) brightness(1.25); } }"""
     else:
-        theme_vars = ":root { color-scheme: dark; --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; }"
+        theme_vars = ":root { color-scheme: dark; --bg: #0b0f14; --ink: #e6edf5; --muted: #9aa8b8; --line: #2a3544; --panel: #121923; --card: #101720; --accent: #62d6c7; --link: #8bd3ff; --code: #070a0f; --soft: #111a24; --reserved: #182231; --ruler: #16202d; --logo-filter: invert(1) brightness(1.25); }"
     css = f"""
 {theme_vars}
 * {{ box-sizing: border-box; }}
@@ -863,6 +875,11 @@ a {{ color: var(--link); text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
 header {{ border-bottom: 1px solid var(--line); background: var(--panel); }}
 .wrap {{ max-width: 1180px; margin: 0 auto; padding: 24px; }}
+.sitebar {{ border-bottom: 1px solid var(--line); background: var(--bg); }}
+.sitebar .wrap {{ display: flex; justify-content: space-between; align-items: center; padding-top: 14px; padding-bottom: 14px; }}
+.brand-mark {{ display: inline-flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 800; text-decoration: none; }}
+.brand-mark:hover {{ text-decoration: none; color: var(--ink); }}
+.brand-logo {{ width: 34px; height: 34px; object-fit: contain; filter: var(--logo-filter); }}
 .kicker {{ color: var(--accent); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }}
 h1 {{ margin: 4px 0 10px; font-size: 34px; line-height: 1.15; }}
 h2 {{ margin-top: 34px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }}
@@ -873,14 +890,15 @@ h3 {{ margin-top: 24px; }}
 .card strong {{ display: block; margin-bottom: 4px; }}
 .meta {{ color: var(--muted); font-size: 13px; }}
 .datasheet-browser {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); padding: 14px; }}
-.datasheet-controls {{ display: grid; grid-template-columns: minmax(240px, 1.4fr) repeat(2, minmax(160px, .7fr)); gap: 10px; align-items: end; margin-bottom: 12px; }}
+.datasheet-controls {{ display: grid; grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(150px, .7fr)); gap: 10px; align-items: end; margin-bottom: 12px; }}
 .datasheet-search, .datasheet-select {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); padding: 9px 11px; }}
 .filter-label {{ display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }}
 .filter-checks {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }}
 .filter-checks label {{ display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); padding: 5px 10px; font-size: 13px; cursor: pointer; }}
 .filter-checks input {{ margin: 0; }}
-.datasheet-section, .package-group {{ border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; background: var(--soft); }}
-.datasheet-section > summary, .package-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
+.datasheet-section, .subpackage-group, .package-group {{ border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; background: var(--soft); }}
+.datasheet-section > summary, .subpackage-group > summary, .package-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
+.subpackage-group {{ margin: 8px 10px; background: var(--panel); }}
 .package-group {{ margin: 8px 10px; background: var(--card); }}
 .datasheet-list {{ max-height: 260px; overflow-y: auto; padding: 4px 10px 10px; }}
 .datasheet-link-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 14px; }}
@@ -921,7 +939,7 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave-controls label {{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }}
 .wave-controls input {{ width: 180px; accent-color: var(--accent); }}
 .wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
-.wave svg {{ display: block; width: calc(1120px * var(--wave-zoom-x)); max-width: none; height: calc(var(--wave-height) * var(--wave-zoom-y)); }}
+.wave svg {{ display: block; width: 1120px; max-width: none; height: var(--wave-height); }}
 .wave-axis {{ stroke: var(--line); stroke-width: 1; }}
 .wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
 .wave-grid.clock-grid {{ opacity: .45; }}
@@ -947,6 +965,24 @@ footer {{ margin-top: 42px; border-top: 1px solid var(--line); color: var(--mute
     (assets / "radhdl-docgen.css").write_text(css + "\n", encoding="utf-8")
 
 
+def write_brand_assets(out: Path, logo: Path | None) -> None:
+    if not logo:
+        return
+    logo_path = logo.expanduser().resolve()
+    if not logo_path.exists():
+        return
+    assets = out / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(logo_path, assets / "rad-logo.png")
+
+
+def default_brand_logo(root: Path, logo: Path | None) -> Path | None:
+    if logo:
+        return logo
+    candidate = root / "docs" / "assets" / "rad-logo.png"
+    return candidate if candidate.exists() else None
+
+
 def page(title: str, body: str, depth: int = 0) -> str:
     prefix = "../" * depth
     return f"""<!doctype html>
@@ -958,14 +994,10 @@ def page(title: str, body: str, depth: int = 0) -> str:
   <link rel="stylesheet" href="{prefix}assets/radhdl-docgen.css">
 </head>
 <body>
+<div class="sitebar"><div class="wrap">
+  <a class="brand-mark" href="{prefix}index.html"><img class="brand-logo" src="{prefix}assets/rad-logo.png" alt="" onerror="this.style.display='none'"><span>Radical Computer Technologies</span></a>
+</div></div>
 {body}
-<script>
-document.addEventListener('input', function (event) {{
-  if (!event.target.classList || !event.target.classList.contains('wave-zoom')) return;
-  var wave = event.target.closest('.wave');
-  if (wave) wave.style.setProperty('--wave-zoom', String(Number(event.target.value) / 100));
-}});
-</script>
 </body>
 </html>
 """
@@ -1617,11 +1649,17 @@ def waveform_script() -> str:
     const grids = Array.from(wave.querySelectorAll(".wave-grid"));
     const clockGrids = grids.filter((grid) => grid.dataset.clock === "1");
     const snapGrids = clockGrids.length ? clockGrids : grids;
+    const baseWidth = svg && svg.viewBox && svg.viewBox.baseVal ? Number(svg.viewBox.baseVal.width || 1120) : 1120;
+    const baseHeight = svg && svg.viewBox && svg.viewBox.baseVal ? Number(svg.viewBox.baseVal.height || 320) : 320;
     const setZoom = () => {
       const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
       const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
       wave.style.setProperty("--wave-zoom-x", String(valueX));
       wave.style.setProperty("--wave-zoom-y", String(valueY));
+      if (svg) {
+        svg.style.width = `${baseWidth * valueX}px`;
+        svg.style.height = `${baseHeight * valueY}px`;
+      }
       const minSpacing = valueX >= 2.5 ? 38 : valueX >= 1.6 ? 52 : 78;
       let lastShown = -Infinity;
       labels.forEach((label) => {
@@ -2143,7 +2181,7 @@ def render_module(
   <nav class="breadcrumb"><a href="../../index.html">RadHDL</a> / <a href="../../libraries/{html.escape(module.library)}.html">{html.escape(module.library)}</a></nav>
   <div class="kicker">{html.escape(module.category)} / {html.escape(module.kind)}</div>
   <h1>{html.escape(module.name)}</h1>
-  <div class="meta">Documentation version: {html.escape(version)} / Package: {html.escape(package_group(module))} / Source package: {html.escape(source_package_group(module))}</div>
+  <div class="meta">Documentation version: {html.escape(version)} / Subpackage: {html.escape(subpackage_group(module))} / Source package: {html.escape(source_package_group(module))}</div>
   <div class="summary">{paragraph(module.description, "No source description has been written for this module yet.")}</div>
   {render_module_quick_links(module)}
 </div></header>
@@ -2204,63 +2242,94 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
     source_packages = sorted({source_package_group(module) for module in modules}, key=lambda item: item.lower())
-    package_order = {"Comms": 0, "Transform": 1, "Matrix": 2, "Filter": 3, "Detection": 4, "Misc": 5}
+    subpackages = sorted({subpackage_group(module) for module in modules}, key=lambda item: item.lower())
+    subpackage_order = {
+        "dsp_comms": 0,
+        "dsp_transform": 1,
+        "dsp_matrix": 2,
+        "dsp_filter": 3,
+        "dsp_detection": 4,
+        "dsp_misc": 5,
+        "radif_axi": 10,
+        "radif_i2c": 11,
+        "radif_i2s": 12,
+        "radif_spi": 13,
+        "radif_smi": 14,
+        "radif_uart": 15,
+        "radif_regbank": 16,
+        "radif_misc": 17,
+    }
     category_options = "".join(f'<option value="{html.escape(category)}">{html.escape(category)}</option>' for category in categories)
+    subpackage_options = "".join(f'<option value="{html.escape(subpackage)}">{html.escape(subpackage)}</option>' for subpackage in subpackages)
     source_package_options = "".join(f'<option value="{html.escape(package)}">{html.escape(package)}</option>' for package in source_packages)
     sections: list[str] = []
     for category in categories:
         category_modules = [module for module in modules if module.category == category]
-        packages = sorted({package_group(module) for module in category_modules}, key=lambda item: (package_order.get(item, 100), item.lower()))
-        package_sections: list[str] = []
-        for package in packages:
-            package_modules = sorted(
-                [module for module in category_modules if package_group(module) == package],
-                key=lambda item: item.name.lower(),
-            )
-            rows = []
-            for module in package_modules:
-                regs = register_count(module)
-                register_meta = f" / {regs} registers" if regs else ""
-                has_testbench = bool(module.testbenches)
-                has_waveform = any(bench.simulation.get("vcd") for bench in module.testbenches)
-                has_axi = any("AXI" in port.name.upper() or "AXIS" in port.name.upper() for port in module.ports)
-                has_generics = bool(module.generics)
-                source_package = source_package_group(module)
-                search_text = " ".join(
-                    [
-                        module.name,
-                        module.library,
-                        module.category,
-                        package,
-                        source_package,
-                        module.description.splitlines()[0] if module.description else "",
-                        register_search_text(module),
-                    ]
-                ).lower()
-                rows.append(
-                    '<div class="datasheet-link-row" '
-                    f'data-datasheet-item data-search="{html.escape(search_text)}" '
-                    f'data-category="{html.escape(module.category)}" '
-                    f'data-source-package="{html.escape(source_package)}" '
-                    f'data-has-register-map="{str(bool(regs)).lower()}" '
-                    f'data-has-testbench="{str(has_testbench).lower()}" '
-                    f'data-has-waveform="{str(has_waveform).lower()}" '
-                    f'data-has-axi="{str(has_axi).lower()}" '
-                    f'data-has-generics="{str(has_generics).lower()}">'
-                    f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
-                    f'<span class="meta">{html.escape(source_package)} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
-                    "</div>"
+        category_subpackages = sorted(
+            {subpackage_group(module) for module in category_modules},
+            key=lambda item: (subpackage_order.get(item, 100), item.lower()),
+        )
+        subpackage_sections: list[str] = []
+        for subpackage in category_subpackages:
+            subpackage_modules = [module for module in category_modules if subpackage_group(module) == subpackage]
+            packages = sorted({source_package_group(module) for module in subpackage_modules}, key=lambda item: item.lower())
+            package_sections: list[str] = []
+            for source_package in packages:
+                package_modules = sorted(
+                    [module for module in subpackage_modules if source_package_group(module) == source_package],
+                    key=lambda item: item.name.lower(),
                 )
-            package_sections.append(
-                f'<details class="package-group" data-package-group>'
-                f'<summary>{html.escape(package)} <span class="meta">{len(package_modules)} datasheets</span></summary>'
-                f'<div class="datasheet-list">{"".join(rows)}</div>'
+                rows = []
+                for module in package_modules:
+                    regs = register_count(module)
+                    register_meta = f" / {regs} registers" if regs else ""
+                    has_testbench = bool(module.testbenches)
+                    has_waveform = any(bench.simulation.get("vcd") for bench in module.testbenches)
+                    has_axi = any("AXI" in port.name.upper() or "AXIS" in port.name.upper() for port in module.ports)
+                    has_generics = bool(module.generics)
+                    module_subpackage = subpackage_group(module)
+                    search_text = " ".join(
+                        [
+                            module.name,
+                            module.library,
+                            module.category,
+                            module_subpackage,
+                            source_package,
+                            module.description.splitlines()[0] if module.description else "",
+                            register_search_text(module),
+                        ]
+                    ).lower()
+                    rows.append(
+                        '<div class="datasheet-link-row" '
+                        f'data-datasheet-item data-search="{html.escape(search_text)}" '
+                        f'data-category="{html.escape(module.category)}" '
+                        f'data-subpackage="{html.escape(module_subpackage)}" '
+                        f'data-source-package="{html.escape(source_package)}" '
+                        f'data-has-register-map="{str(bool(regs)).lower()}" '
+                        f'data-has-testbench="{str(has_testbench).lower()}" '
+                        f'data-has-waveform="{str(has_waveform).lower()}" '
+                        f'data-has-axi="{str(has_axi).lower()}" '
+                        f'data-has-generics="{str(has_generics).lower()}">'
+                        f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
+                        f'<span class="meta">{html.escape(module_subpackage)} / {html.escape(source_package)} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
+                        "</div>"
+                    )
+                package_sections.append(
+                    f'<details class="package-group" data-source-package-group>'
+                    f'<summary>{html.escape(source_package)} <span class="meta">{len(package_modules)} datasheets</span></summary>'
+                    f'<div class="datasheet-list">{"".join(rows)}</div>'
+                    "</details>"
+                )
+            subpackage_sections.append(
+                f'<details class="subpackage-group" data-subpackage-group>'
+                f'<summary>{html.escape(subpackage)} <span class="meta">{len(subpackage_modules)} datasheets</span></summary>'
+                f'{"".join(package_sections)}'
                 "</details>"
             )
         sections.append(
             f'<details class="datasheet-section" data-datasheet-section>'
             f'<summary>{html.escape(category)} <span class="meta">{len(category_modules)} datasheets</span></summary>'
-            f'{"".join(package_sections)}'
+            f'{"".join(subpackage_sections)}'
             "</details>"
         )
     script = """
@@ -2268,6 +2337,7 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
 (() => {
   const input = document.querySelector("[data-datasheet-search]");
   const category = document.querySelector("[data-filter-category]");
+  const subpackage = document.querySelector("[data-filter-subpackage]");
   const sourcePackage = document.querySelector("[data-filter-source-package]");
   const checks = Array.from(document.querySelectorAll("[data-filter-flag]"));
   const empty = document.querySelector("[data-datasheet-empty]");
@@ -2275,30 +2345,37 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
   const apply = () => {
     const query = input.value.trim().toLowerCase();
     const selectedCategory = category ? category.value : "";
+    const selectedSubpackage = subpackage ? subpackage.value : "";
     const selectedSourcePackage = sourcePackage ? sourcePackage.value : "";
     const activeFlags = checks.filter((check) => check.checked).map((check) => check.dataset.filterFlag);
     let visibleCount = 0;
     document.querySelectorAll("[data-datasheet-item]").forEach((row) => {
       const matchesQuery = !query || row.dataset.search.includes(query);
       const matchesCategory = !selectedCategory || row.dataset.category === selectedCategory;
+      const matchesSubpackage = !selectedSubpackage || row.dataset.subpackage === selectedSubpackage;
       const matchesSourcePackage = !selectedSourcePackage || row.dataset.sourcePackage === selectedSourcePackage;
       const matchesFlags = activeFlags.every((flag) => row.dataset[flag] === "true");
-      row.hidden = !(matchesQuery && matchesCategory && matchesSourcePackage && matchesFlags);
+      row.hidden = !(matchesQuery && matchesCategory && matchesSubpackage && matchesSourcePackage && matchesFlags);
       if (!row.hidden) visibleCount += 1;
     });
-    const hasFilters = Boolean(query || selectedCategory || selectedSourcePackage || activeFlags.length);
-    document.querySelectorAll("[data-package-group]").forEach((group) => {
+    const hasFilters = Boolean(query || selectedCategory || selectedSubpackage || selectedSourcePackage || activeFlags.length);
+    document.querySelectorAll("[data-source-package-group]").forEach((group) => {
       group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
       if (hasFilters && !group.hidden) group.open = true;
     });
+    document.querySelectorAll("[data-subpackage-group]").forEach((group) => {
+      group.hidden = !group.querySelector("[data-source-package-group]:not([hidden])");
+      if (hasFilters && !group.hidden) group.open = true;
+    });
     document.querySelectorAll("[data-datasheet-section]").forEach((section) => {
-      section.hidden = !section.querySelector("[data-package-group]:not([hidden])");
+      section.hidden = !section.querySelector("[data-subpackage-group]:not([hidden])");
       if (hasFilters && !section.hidden) section.open = true;
     });
     if (empty) empty.hidden = visibleCount !== 0;
   };
   input.addEventListener("input", apply);
   if (category) category.addEventListener("change", apply);
+  if (subpackage) subpackage.addEventListener("change", apply);
   if (sourcePackage) sourcePackage.addEventListener("change", apply);
   checks.forEach((check) => check.addEventListener("change", apply));
   apply();
@@ -2310,6 +2387,7 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
         '<div class="datasheet-controls">'
         '<label class="filter-label">Search<input class="datasheet-search" type="search" data-datasheet-search placeholder="Search datasheets"></label>'
         f'<label class="filter-label">Library<select class="datasheet-select" data-filter-category><option value="">All libraries</option>{category_options}</select></label>'
+        f'<label class="filter-label">Subpackage<select class="datasheet-select" data-filter-subpackage><option value="">All subpackages</option>{subpackage_options}</select></label>'
         f'<label class="filter-label">Source package<select class="datasheet-select" data-filter-source-package><option value="">All packages</option>{source_package_options}</select></label>'
         "</div>"
         '<div class="filter-checks" aria-label="Datasheet filters">'
@@ -2413,6 +2491,7 @@ def build_docs(args: argparse.Namespace) -> int:
         shutil.rmtree(out)
     out.mkdir(parents=True)
     write_css(out, args.theme)
+    write_brand_assets(out, default_brand_logo(root, args.brand_logo))
     hdl_units, benches, maps = catalog(root)
     modules = datasheet_modules(hdl_units)
     sim_cache: dict[str, dict[str, Any]] = {}
@@ -2450,6 +2529,7 @@ def build_one_module(args: argparse.Namespace) -> int:
         raise ValueError(f"module not found: {args.name}")
     out.mkdir(parents=True, exist_ok=True)
     write_css(out, args.theme)
+    write_brand_assets(out, default_brand_logo(root, args.brand_logo))
     render_module(module, root, out, args.run_sims, args.strict, args.stop_time, {})
     print(out / "modules" / module_doc_slug(module) / "index.html")
     return 0
@@ -2483,6 +2563,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_parser_.add_argument("--strict", action="store_true", help="Fail on simulation/tool errors instead of recording skips.")
     build_parser_.add_argument("--stop-time", default="100us", help="GHDL --stop-time used for generated waveform runs.")
     build_parser_.add_argument("--theme", choices=("dark", "light", "auto"), default="dark", help="Static HTML color theme.")
+    build_parser_.add_argument("--brand-logo", type=Path, help="Optional transparent PNG logo copied into the generated docs assets.")
 
     module_parser = sub.add_parser("module", help="Generate one module datasheet.")
     module_parser.add_argument("name")
@@ -2492,6 +2573,7 @@ def build_parser() -> argparse.ArgumentParser:
     module_parser.add_argument("--strict", action="store_true")
     module_parser.add_argument("--stop-time", default="100us")
     module_parser.add_argument("--theme", choices=("dark", "light", "auto"), default="dark")
+    module_parser.add_argument("--brand-logo", type=Path)
 
     sim_parser = sub.add_parser("sim", help="Run one testbench and capture waveform status.")
     sim_parser.add_argument("testbench")
