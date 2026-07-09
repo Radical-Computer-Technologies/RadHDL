@@ -1,0 +1,41 @@
+{
+  "name": "radif_uart_to_reg",
+  "description": "Protocol reference for the RADIF UART-to-register bridge.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "radif_uart_to_reg",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "The UART bridge has no local configuration registers; it forwards binary UART commands to downstream RADIF register targets.",
+      "registers": [
+        {
+          "name": "write_frame",
+          "offset": "0x0000",
+          "access": "protocol",
+          "reset": "none",
+          "description": "UART write command frame.",
+          "fields": [
+            {"name": "CMD", "bits": "7:0", "description": "First byte is 0x57 for write."},
+            {"name": "ADDR", "bits": "23:8", "description": "Two-byte big-endian byte address."},
+            {"name": "DATA", "bits": "55:24", "description": "Four-byte big-endian 32-bit write data."}
+          ]
+        },
+        {
+          "name": "read_frame",
+          "offset": "0x0004",
+          "access": "protocol",
+          "reset": "none",
+          "description": "UART read command frame.",
+          "fields": [
+            {"name": "CMD", "bits": "7:0", "description": "First byte is 0x52 for read."},
+            {"name": "ADDR", "bits": "23:8", "description": "Two-byte big-endian byte address."}
+          ]
+        }
+      ]
+    }
+  ]
+}

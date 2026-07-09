@@ -1,0 +1,79 @@
+{
+  "name": "radif_irq_controller",
+  "description": "Software-visible register map for the RADIF interrupt aggregator.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "radif_irq_controller",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Aggregates interrupt sources into masked pending status and one shared interrupt output.",
+      "registers": [
+        {
+          "name": "control",
+          "offset": "0x0000",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Configures global interrupt output behavior.",
+          "fields": [
+            {"name": "GLOBAL_EN", "bits": "0", "description": "When set, masked pending bits may assert irq_o."}
+          ]
+        },
+        {
+          "name": "status",
+          "offset": "0x0004",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Summarized interrupt controller state.",
+          "fields": [
+            {"name": "GLOBAL_EN", "bits": "0", "description": "Current global interrupt enable state."},
+            {"name": "MASKED_PENDING", "bits": "1", "description": "Set when any pending interrupt is enabled by MASK."}
+          ]
+        },
+        {
+          "name": "mask",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Per-source interrupt mask.",
+          "fields": [
+            {"name": "IRQ_MASK", "bits": "31:0", "description": "A bit value of 1 enables the corresponding source pending bit."}
+          ]
+        },
+        {
+          "name": "pending",
+          "offset": "0x000C",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Latched interrupt pending bits.",
+          "fields": [
+            {"name": "IRQ_PENDING", "bits": "31:0", "description": "Current pending bits. Writes replace the pending register."}
+          ]
+        },
+        {
+          "name": "clear",
+          "offset": "0x0010",
+          "access": "wo",
+          "reset": "0x00000000",
+          "description": "Write-one-to-clear pending bits.",
+          "fields": [
+            {"name": "IRQ_CLEAR", "bits": "31:0", "description": "Writing 1 clears the corresponding pending bit."}
+          ]
+        },
+        {
+          "name": "force",
+          "offset": "0x0014",
+          "access": "wo",
+          "reset": "0x00000000",
+          "description": "Software force register for pending bits.",
+          "fields": [
+            {"name": "IRQ_FORCE", "bits": "31:0", "description": "Writing 1 sets the corresponding pending bit."}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -764,6 +764,8 @@ def dsp_package_group(module: ModuleDoc) -> str:
     name = module.name.lower()
     path = module.path.lower()
     haystack = f"{name} {path}"
+    if any(token in haystack for token in ("am_iq", "modulator", "demodulator", "comms")):
+        return "Comms"
     if any(token in haystack for token in ("matrix", "dot")):
         return "Matrix"
     if any(token in haystack for token in ("fir", "biquad", "lowpass", "filter", "equalizer", "eq_")):
@@ -913,12 +915,13 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .testbench-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
 .testbench-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; }}
 .testbench-body {{ padding: 0 12px 12px; }}
-.wave {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); margin: 12px 0; --wave-zoom: 1; }}
+.wave {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); margin: 12px 0; --wave-zoom-x: 1; --wave-zoom-y: 1; }}
 .wave h4 {{ margin: 0 0 8px; }}
-.wave-controls {{ display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--muted); font-size: 13px; }}
+.wave-controls {{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 8px; color: var(--muted); font-size: 13px; }}
+.wave-controls label {{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }}
 .wave-controls input {{ width: 180px; accent-color: var(--accent); }}
 .wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
-.wave svg {{ display: block; width: calc(1120px * var(--wave-zoom)); max-width: none; height: auto; }}
+.wave svg {{ display: block; width: calc(1120px * var(--wave-zoom-x)); max-width: none; height: calc(var(--wave-height) * var(--wave-zoom-y)); }}
 .wave-axis {{ stroke: var(--line); stroke-width: 1; }}
 .wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
 .wave-grid.clock-grid {{ opacity: .45; }}
@@ -1605,7 +1608,8 @@ def waveform_script() -> str:
   document.querySelectorAll(".wave").forEach((wave) => {
     if (wave.dataset.ready === "1") return;
     wave.dataset.ready = "1";
-    const zoom = wave.querySelector(".wave-zoom");
+    const zoomX = wave.querySelector(".wave-zoom-x");
+    const zoomY = wave.querySelector(".wave-zoom-y");
     const svg = wave.querySelector("svg.waveform");
     const hover = wave.querySelector(".wave-hover-line");
     const hoverLabel = wave.querySelector(".wave-hover-label");
@@ -1614,15 +1618,25 @@ def waveform_script() -> str:
     const clockGrids = grids.filter((grid) => grid.dataset.clock === "1");
     const snapGrids = clockGrids.length ? clockGrids : grids;
     const setZoom = () => {
-      const value = zoom ? Number(zoom.value) / 100 : 1;
-      wave.style.setProperty("--wave-zoom", String(value));
-      const every = value >= 2.4 ? 1 : value >= 1.5 ? 2 : 4;
-      labels.forEach((label, index) => {
-        label.style.display = index % every === 0 ? "" : "none";
+      const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
+      const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
+      wave.style.setProperty("--wave-zoom-x", String(valueX));
+      wave.style.setProperty("--wave-zoom-y", String(valueY));
+      const minSpacing = valueX >= 2.5 ? 38 : valueX >= 1.6 ? 52 : 78;
+      let lastShown = -Infinity;
+      labels.forEach((label) => {
+        const x = Number(label.getAttribute("x") || "0") * valueX;
+        if (x - lastShown >= minSpacing) {
+          label.style.display = "";
+          lastShown = x;
+        } else {
+          label.style.display = "none";
+        }
       });
     };
     setZoom();
-    if (zoom) zoom.addEventListener("input", setZoom);
+    if (zoomX) zoomX.addEventListener("input", setZoom);
+    if (zoomY) zoomY.addEventListener("input", setZoom);
     if (!svg || !hover || !hoverLabel || !snapGrids.length) return;
     const nearest = (x) => {
       let best = snapGrids[0];
@@ -1649,7 +1663,7 @@ def waveform_script() -> str:
       hover.setAttribute("x2", x);
       hover.style.opacity = "1";
       hoverLabel.setAttribute("x", x + 4);
-      hoverLabel.textContent = `t=${line.dataset.time}`;
+      hoverLabel.textContent = line.dataset.label || `t=${line.dataset.time}`;
       hoverLabel.style.opacity = "1";
     });
     svg.addEventListener("mouseleave", () => {
@@ -1704,7 +1718,10 @@ def render_waveform_svg(
     selected = [signal for signal in signals if signal.get("samples")][:max_signals]
     if not selected:
         return ""
-    end_time = max((time for signal in selected for time, _ in signal["samples"]), default=1)
+    scale_signals = selected
+    if grid_signals:
+        scale_signals = selected + [signal for signal in grid_signals if signal.get("samples")]
+    end_time = max((time for signal in scale_signals for time, _ in signal["samples"]), default=1)
     end_time = max(1, end_time)
     width = 1120
     label_width = 190
@@ -1718,11 +1735,13 @@ def render_waveform_svg(
     grid_class = "wave-grid clock-grid" if clock_based else "wave-grid fallback-grid"
     for tick_index, time_value in enumerate(ticks):
         x = label_width + (time_value / end_time) * plot_width
+        tick_label = f"C{tick_index}" if clock_based else str(time_value)
+        hover_label = f"cycle {tick_index}" if clock_based else f"t={time_value}"
         grid.append(
-            f'<line class="{grid_class}" data-clock="{1 if clock_based else 0}" data-x="{x:.1f}" data-time="{time_value}" '
+            f'<line class="{grid_class}" data-clock="{1 if clock_based else 0}" data-x="{x:.1f}" data-time="{time_value}" data-label="{html.escape(hover_label)}" '
             f'x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />'
         )
-        grid.append(f'<text class="wave-time" data-tick="{tick_index}" x="{x + 3:.1f}" y="15">{time_value}</text>')
+        grid.append(f'<text class="wave-time" data-tick="{tick_index}" x="{x + 3:.1f}" y="15">{html.escape(tick_label)}</text>')
     rows = []
     for index, signal in enumerate(selected):
         row_y = top + index * row_height
@@ -1749,9 +1768,12 @@ def render_waveform_svg(
         '<div class="wave">'
         f"<h4>{html.escape(title)}</h4>"
         f"{source_html}"
-        '<div class="wave-controls"><label>Zoom <input class="wave-zoom" type="range" min="80" max="320" value="100"></label></div>'
+        '<div class="wave-controls">'
+        '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="420" value="100"></label>'
+        '<label>Vertical <input class="wave-zoom-y" type="range" min="70" max="260" value="100"></label>'
+        "</div>"
         '<div class="wave-viewport">'
-        f'<svg class="waveform" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
+        f'<svg class="waveform" style="--wave-height:{height}px" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(title)}">'
         + "".join(grid)
         + "".join(rows)
         + f'<line class="wave-hover-line" x1="{label_width}" y1="20" x2="{label_width}" y2="{height - 18}" />'
@@ -2182,7 +2204,7 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
     source_packages = sorted({source_package_group(module) for module in modules}, key=lambda item: item.lower())
-    package_order = {"Transform": 0, "Matrix": 1, "Filter": 2, "Detection": 3, "Misc": 4}
+    package_order = {"Comms": 0, "Transform": 1, "Matrix": 2, "Filter": 3, "Detection": 4, "Misc": 5}
     category_options = "".join(f'<option value="{html.escape(category)}">{html.escape(category)}</option>' for category in categories)
     source_package_options = "".join(f'<option value="{html.escape(package)}">{html.escape(package)}</option>' for package in source_packages)
     sections: list[str] = []

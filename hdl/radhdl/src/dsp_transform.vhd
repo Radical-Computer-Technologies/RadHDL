@@ -72,6 +72,22 @@ package dsp_transform is
     );
   end component;
 
+  -- Component declaration sourced from dsp/hdl/raddsp/src/raddsp_sqrt_u32.vhd.
+  component raddsp_sqrt_u32 is
+    generic (
+      -- Width of the unsigned radicand.
+      INPUT_WIDTH  : positive := 32;
+      -- Width of the unsigned square-root result.
+      OUTPUT_WIDTH : positive := 16
+    );
+    port (
+      -- Unsigned input value.
+      x_i     : in  std_logic_vector(INPUT_WIDTH - 1 downto 0);
+      -- Floor square-root result.
+      root_o  : out std_logic_vector(OUTPUT_WIDTH - 1 downto 0)
+    );
+  end component;
+
   -- Component declaration sourced from dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd.
   component raddsp_xilinx_dsp48_mul is
     generic (

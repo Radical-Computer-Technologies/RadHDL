@@ -1,0 +1,88 @@
+{
+  "name": "radif_gpio_reg_block",
+  "description": "Software-visible register map for the RADIF GPIO control/status block.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "radif_gpio_reg_block",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Controls GPIO output values, output enables, input readback, edge detection, and interrupt masking.",
+      "registers": [
+        {
+          "name": "out_value",
+          "offset": "0x0000",
+          "access": "rw",
+          "reset": "RESET_OUT_VALUE",
+          "description": "GPIO output drive values.",
+          "fields": [
+            {"name": "GPIO_OUT", "bits": "31:0", "description": "One output value bit per GPIO pin. Bits above GPIO_WIDTH are unused."}
+          ]
+        },
+        {
+          "name": "out_enable",
+          "offset": "0x0004",
+          "access": "rw",
+          "reset": "RESET_OUT_ENABLE",
+          "description": "GPIO output enable controls.",
+          "fields": [
+            {"name": "GPIO_OE", "bits": "31:0", "description": "One output-enable bit per GPIO pin. Bits above GPIO_WIDTH are unused."}
+          ]
+        },
+        {
+          "name": "in_value",
+          "offset": "0x0008",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Synchronized GPIO input values.",
+          "fields": [
+            {"name": "GPIO_IN", "bits": "31:0", "description": "One synchronized input value bit per GPIO pin. Bits above GPIO_WIDTH read as zero."}
+          ]
+        },
+        {
+          "name": "irq_status",
+          "offset": "0x000C",
+          "access": "rw1c",
+          "reset": "0x00000000",
+          "description": "Latched GPIO edge-detect interrupt pending bits.",
+          "fields": [
+            {"name": "IRQ_PENDING", "bits": "31:0", "description": "Pending edge bits. Write 1 to clear the corresponding pending bit."}
+          ]
+        },
+        {
+          "name": "irq_mask",
+          "offset": "0x0010",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "GPIO interrupt enable mask.",
+          "fields": [
+            {"name": "IRQ_MASK", "bits": "31:0", "description": "A bit value of 1 allows the corresponding pending bit to assert irq_o."}
+          ]
+        },
+        {
+          "name": "rise_enable",
+          "offset": "0x0014",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Rising-edge interrupt detection enable bits.",
+          "fields": [
+            {"name": "RISE_EN", "bits": "31:0", "description": "A bit value of 1 latches a pending interrupt when the corresponding GPIO input rises."}
+          ]
+        },
+        {
+          "name": "fall_enable",
+          "offset": "0x0018",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Falling-edge interrupt detection enable bits.",
+          "fields": [
+            {"name": "FALL_EN", "bits": "31:0", "description": "A bit value of 1 latches a pending interrupt when the corresponding GPIO input falls."}
+          ]
+        }
+      ]
+    }
+  ]
+}

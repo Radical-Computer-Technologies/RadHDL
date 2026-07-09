@@ -4,6 +4,7 @@ namespace eval ::RadHDL {
     variable ROOT [file normalize [file join [file dirname [info script]] ..]]
     variable RADHDL_API_FILES [list \
         [file join $::RadHDL::ROOT hdl radhdl src dsp.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src dsp_comms.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src dsp_detection.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src dsp_filter.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src dsp_matrix.vhd] \
@@ -15,6 +16,7 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_regbank.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_smi.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_spi.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src interfaces_uart.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src debug.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src dsp_context.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_context.vhd] \
@@ -32,6 +34,7 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_fft_twiddle_pkg.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src fft_tdp_ram.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_fft_twiddle_rom.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_sqrt_u32.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_mul.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_square_seq.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_wide_mul.vhd] \
@@ -43,6 +46,8 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fir.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_biquad.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_dds.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_am_iq_modulator.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_am_iq_demodulator.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_float_to_fixed.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_fixed_to_float.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_iq_magnitude_sq.vhd] \
@@ -90,7 +95,10 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_pkg.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_bank.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_interconnect.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_gpio_reg_block.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_irq_controller.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_axi_lite_to_reg.vhd] \
+        [file join $::RadHDL::ROOT interfaces hdl radif src radif_uart_to_reg.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_i2s_axis.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_to_i2c_master.vhd] \
         [file join $::RadHDL::ROOT interfaces hdl radif src radif_reg_to_spi_master.vhd] \

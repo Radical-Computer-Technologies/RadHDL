@@ -21,6 +21,12 @@ class EntityDecl:
 
 
 DSP_GROUPS: dict[str, tuple[str, ...]] = {
+    "dsp_comms": (
+        "am_iq",
+        "comms",
+        "modulator",
+        "demodulator",
+    ),
     "dsp_filter": (
         "biquad",
         "fir",
@@ -50,6 +56,7 @@ DSP_GROUPS: dict[str, tuple[str, ...]] = {
         "iq_magnitude",
         "mix",
         "radfft",
+        "sqrt",
         "twiddle",
     ),
 }
@@ -59,7 +66,8 @@ INTERFACE_GROUPS: dict[str, tuple[str, ...]] = {
     "interfaces_i2c": ("i2c",),
     "interfaces_smi": ("smi",),
     "interfaces_spi": ("spi", "qspi"),
-    "interfaces_regbank": ("reg_bank", "reg_interconnect"),
+    "interfaces_uart": ("uart",),
+    "interfaces_regbank": ("reg_bank", "reg_interconnect", "gpio", "irq_controller"),
     "interfaces_axi": ("axi", "axis"),
 }
 
