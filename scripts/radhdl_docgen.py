@@ -871,7 +871,12 @@ h3 {{ margin-top: 24px; }}
 .card strong {{ display: block; margin-bottom: 4px; }}
 .meta {{ color: var(--muted); font-size: 13px; }}
 .datasheet-browser {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); padding: 14px; }}
-.datasheet-search {{ width: 100%; max-width: 460px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); padding: 9px 11px; margin-bottom: 12px; }}
+.datasheet-controls {{ display: grid; grid-template-columns: minmax(240px, 1.4fr) repeat(2, minmax(160px, .7fr)); gap: 10px; align-items: end; margin-bottom: 12px; }}
+.datasheet-search, .datasheet-select {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--ink); padding: 9px 11px; }}
+.filter-label {{ display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }}
+.filter-checks {{ display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }}
+.filter-checks label {{ display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); padding: 5px 10px; font-size: 13px; cursor: pointer; }}
+.filter-checks input {{ margin: 0; }}
 .datasheet-section, .package-group {{ border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; background: var(--soft); }}
 .datasheet-section > summary, .package-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
 .package-group {{ margin: 8px 10px; background: var(--card); }}
@@ -879,6 +884,7 @@ h3 {{ margin-top: 24px; }}
 .datasheet-link-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); font-size: 14px; }}
 .datasheet-link-row:first-child {{ border-top: 0; }}
 .datasheet-link-row .meta {{ white-space: nowrap; }}
+.datasheet-empty {{ color: var(--muted); padding: 10px; }}
 .quick-links {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
 .pill {{ display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); color: var(--link); padding: 5px 10px; font-size: 13px; font-weight: 700; }}
 .pill:hover {{ text-decoration: none; border-color: var(--accent); }}
@@ -2175,7 +2181,10 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
     preferred_categories = ["DSP", "Debug", "Interfaces"]
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
+    source_packages = sorted({source_package_group(module) for module in modules}, key=lambda item: item.lower())
     package_order = {"Transform": 0, "Matrix": 1, "Filter": 2, "Detection": 3, "Misc": 4}
+    category_options = "".join(f'<option value="{html.escape(category)}">{html.escape(category)}</option>' for category in categories)
+    source_package_options = "".join(f'<option value="{html.escape(package)}">{html.escape(package)}</option>' for package in source_packages)
     sections: list[str] = []
     for category in categories:
         category_modules = [module for module in modules if module.category == category]
@@ -2190,22 +2199,34 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
             for module in package_modules:
                 regs = register_count(module)
                 register_meta = f" / {regs} registers" if regs else ""
+                has_testbench = bool(module.testbenches)
+                has_waveform = any(bench.simulation.get("vcd") for bench in module.testbenches)
+                has_axi = any("AXI" in port.name.upper() or "AXIS" in port.name.upper() for port in module.ports)
+                has_generics = bool(module.generics)
+                source_package = source_package_group(module)
                 search_text = " ".join(
                     [
                         module.name,
                         module.library,
                         module.category,
                         package,
-                        source_package_group(module),
+                        source_package,
                         module.description.splitlines()[0] if module.description else "",
                         register_search_text(module),
                     ]
                 ).lower()
                 rows.append(
                     '<div class="datasheet-link-row" '
-                    f'data-datasheet-item data-search="{html.escape(search_text)}">'
+                    f'data-datasheet-item data-search="{html.escape(search_text)}" '
+                    f'data-category="{html.escape(module.category)}" '
+                    f'data-source-package="{html.escape(source_package)}" '
+                    f'data-has-register-map="{str(bool(regs)).lower()}" '
+                    f'data-has-testbench="{str(has_testbench).lower()}" '
+                    f'data-has-waveform="{str(has_waveform).lower()}" '
+                    f'data-has-axi="{str(has_axi).lower()}" '
+                    f'data-has-generics="{str(has_generics).lower()}">'
                     f'<a href="modules/{module_doc_slug(module)}/index.html">{html.escape(module.name)}</a>'
-                    f'<span class="meta">{html.escape(source_package_group(module))} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
+                    f'<span class="meta">{html.escape(source_package)} / {len(module.ports)} ports / {len(module.generics)} generics{html.escape(register_meta)}</span>'
                     "</div>"
                 )
             package_sections.append(
@@ -2224,28 +2245,59 @@ def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
 <script>
 (() => {
   const input = document.querySelector("[data-datasheet-search]");
+  const category = document.querySelector("[data-filter-category]");
+  const sourcePackage = document.querySelector("[data-filter-source-package]");
+  const checks = Array.from(document.querySelectorAll("[data-filter-flag]"));
+  const empty = document.querySelector("[data-datasheet-empty]");
   if (!input) return;
   const apply = () => {
     const query = input.value.trim().toLowerCase();
+    const selectedCategory = category ? category.value : "";
+    const selectedSourcePackage = sourcePackage ? sourcePackage.value : "";
+    const activeFlags = checks.filter((check) => check.checked).map((check) => check.dataset.filterFlag);
+    let visibleCount = 0;
     document.querySelectorAll("[data-datasheet-item]").forEach((row) => {
-      row.hidden = query && !row.dataset.search.includes(query);
+      const matchesQuery = !query || row.dataset.search.includes(query);
+      const matchesCategory = !selectedCategory || row.dataset.category === selectedCategory;
+      const matchesSourcePackage = !selectedSourcePackage || row.dataset.sourcePackage === selectedSourcePackage;
+      const matchesFlags = activeFlags.every((flag) => row.dataset[flag] === "true");
+      row.hidden = !(matchesQuery && matchesCategory && matchesSourcePackage && matchesFlags);
+      if (!row.hidden) visibleCount += 1;
     });
+    const hasFilters = Boolean(query || selectedCategory || selectedSourcePackage || activeFlags.length);
     document.querySelectorAll("[data-package-group]").forEach((group) => {
       group.hidden = !group.querySelector("[data-datasheet-item]:not([hidden])");
-      if (query && !group.hidden) group.open = true;
+      if (hasFilters && !group.hidden) group.open = true;
     });
     document.querySelectorAll("[data-datasheet-section]").forEach((section) => {
       section.hidden = !section.querySelector("[data-package-group]:not([hidden])");
-      if (query && !section.hidden) section.open = true;
+      if (hasFilters && !section.hidden) section.open = true;
     });
+    if (empty) empty.hidden = visibleCount !== 0;
   };
   input.addEventListener("input", apply);
+  if (category) category.addEventListener("change", apply);
+  if (sourcePackage) sourcePackage.addEventListener("change", apply);
+  checks.forEach((check) => check.addEventListener("change", apply));
+  apply();
 })();
 </script>
 """.strip()
     return (
         '<section class="datasheet-browser">'
-        '<input class="datasheet-search" type="search" data-datasheet-search placeholder="Search datasheets">'
+        '<div class="datasheet-controls">'
+        '<label class="filter-label">Search<input class="datasheet-search" type="search" data-datasheet-search placeholder="Search datasheets"></label>'
+        f'<label class="filter-label">Library<select class="datasheet-select" data-filter-category><option value="">All libraries</option>{category_options}</select></label>'
+        f'<label class="filter-label">Source package<select class="datasheet-select" data-filter-source-package><option value="">All packages</option>{source_package_options}</select></label>'
+        "</div>"
+        '<div class="filter-checks" aria-label="Datasheet filters">'
+        '<label><input type="checkbox" data-filter-flag="hasRegisterMap">Has Register Map</label>'
+        '<label><input type="checkbox" data-filter-flag="hasTestbench">Has Testbench</label>'
+        '<label><input type="checkbox" data-filter-flag="hasWaveform">Has Waveform</label>'
+        '<label><input type="checkbox" data-filter-flag="hasAxi">AXI/AXIS</label>'
+        '<label><input type="checkbox" data-filter-flag="hasGenerics">Has Generics</label>'
+        "</div>"
+        '<div class="datasheet-empty" data-datasheet-empty hidden>No datasheets match the selected filters.</div>'
         f'{"".join(sections)}'
         f"{script}"
         "</section>"
@@ -2322,8 +2374,6 @@ def render_index(modules: list[ModuleDoc], benches: list[TestbenchDoc], maps: li
     <tr><th>Testbenches</th><td>{len(benches)}</td></tr>
     <tr><th>Register maps</th><td>{len(maps)}</td></tr>
   </tbody></table>
-  <h2>Register Map Datasheets</h2>
-  {render_register_index(modules)}
   <h2>Datasheets</h2>
   {render_datasheet_browser(modules)}
 </main>
