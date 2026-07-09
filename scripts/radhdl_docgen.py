@@ -392,6 +392,49 @@ def parse_bit_fields(description: str) -> list[dict[str, Any]]:
     return fields
 
 
+def parse_bits(bits: Any) -> tuple[int, int] | None:
+    text = str(bits or "").strip()
+    if not text:
+        return None
+    match = re.fullmatch(r"\[?\s*(\d+)\s*(?::|downto|-)\s*(\d+)\s*\]?", text, re.IGNORECASE)
+    if match:
+        msb = int(match.group(1))
+        lsb = int(match.group(2))
+        if lsb > msb:
+            msb, lsb = lsb, msb
+        return msb, lsb
+    match = re.fullmatch(r"\[?\s*(\d+)\s*\]?", text)
+    if match:
+        bit = int(match.group(1))
+        return bit, bit
+    return None
+
+
+def explicit_register_fields(register: dict[str, Any]) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
+    for field in register.get("fields", []) or []:
+        if not isinstance(field, dict):
+            continue
+        bit_range = parse_bits(field.get("bits"))
+        if bit_range is None:
+            continue
+        name = str(field.get("name") or "").strip()
+        if not name:
+            continue
+        display_name = str(field.get("display_name") or field_display_name(name))
+        description = str(field.get("description") or field_description(name))
+        fields.append(
+            {
+                "name": name,
+                "display_name": display_name,
+                "description": description,
+                "msb": bit_range[0],
+                "lsb": bit_range[1],
+            }
+        )
+    return fields
+
+
 def field_display_name(name: str) -> str:
     words = re.sub(r"[_-]+", " ", name).upper().split()
     replacements = {
@@ -497,7 +540,7 @@ def register_from_json(register: dict[str, Any], region_name: str, region_base: 
         width=width,
         region=region_name,
         description=description,
-        fields=parse_bit_fields(field_source),
+        fields=explicit_register_fields(register) or parse_bit_fields(field_source),
     )
 
 

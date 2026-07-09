@@ -56,7 +56,7 @@ package interfaces_spi is
       spi_cs_n_o   : out std_logic;
       -- SPI master-out/slave-in data.
       spi_mosi_o   : out std_logic;
-      -- SPI master-in/slave-out data.
+      -- SPI master-in/slave-out data sampled into the RX_DATA register.
       spi_miso_i   : in  std_logic
     );
   end component;

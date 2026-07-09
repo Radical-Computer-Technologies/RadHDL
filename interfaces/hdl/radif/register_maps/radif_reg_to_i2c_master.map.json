@@ -16,28 +16,106 @@
           "name": "control",
           "offset": "0x0000",
           "access": "rw",
-          "description": "Control register used to launch and clear I2C transactions.",
+          "reset": "0x00000000",
+          "description": "Launches one-byte I2C transactions and clears sticky completion/error status.",
           "fields": [
-            { "name": "START", "bits": "0", "description": "Starts a one-byte I2C transaction when the master is idle." },
-            { "name": "CLEAR", "bits": "1", "description": "Clears sticky done and error status." },
-            { "name": "READ", "bits": "2", "description": "Selects read transaction when set, write transaction when clear." }
+            {
+              "name": "START",
+              "bits": "0",
+              "description": "Writing 1 starts a one-byte I2C transaction when the master is idle. START is ignored as a stored level by transaction logic after the launch cycle."
+            },
+            {
+              "name": "CLEAR",
+              "bits": "1",
+              "description": "Writing 1 clears STATUS.DONE and STATUS.ACK_ERR. Software should write this as a pulse before launching another transaction when it wants fresh status."
+            },
+            {
+              "name": "READ",
+              "bits": "2",
+              "description": "Selects transaction direction. 1 performs an I2C byte read from SLAVE_ADDR, 0 performs an I2C byte write using TX_DATA."
+            }
           ]
         },
         {
           "name": "status",
           "offset": "0x0004",
           "access": "ro",
-          "description": "I2C master transaction status.",
+          "reset": "0x00000000",
+          "description": "Reports current I2C transaction state and sticky completion/error status.",
           "fields": [
-            { "name": "BUSY", "bits": "0", "description": "Master is actively driving an I2C transaction." },
-            { "name": "DONE", "bits": "1", "description": "Last transaction completed." },
-            { "name": "ACK_ERR", "bits": "2", "description": "Slave did not acknowledge the address or write data byte." }
+            {
+              "name": "BUSY",
+              "bits": "0",
+              "description": "Set while the I2C state machine is actively generating START, address, data, acknowledge, or STOP phases."
+            },
+            {
+              "name": "DONE",
+              "bits": "1",
+              "description": "Sticky completion bit set when the most recent transaction reaches STOP. Cleared by CONTROL.CLEAR, a new START, or reset."
+            },
+            {
+              "name": "ACK_ERR",
+              "bits": "2",
+              "description": "Sticky error bit set when the target does not acknowledge the address byte or write data byte, or when START is requested while BUSY."
+            }
           ]
         },
-        { "name": "clk_div", "offset": "0x0008", "access": "rw", "description": "SCL half-period divider. SCL phase changes every clk_div + 1 FPGA clock cycles." },
-        { "name": "slave_addr", "offset": "0x000C", "access": "rw", "description": "7-bit I2C slave address used for the next transaction." },
-        { "name": "tx_data", "offset": "0x0010", "access": "rw", "description": "Write data byte used for write transactions." },
-        { "name": "rx_data", "offset": "0x0014", "access": "ro", "description": "Read data byte captured from the last read transaction." }
+        {
+          "name": "clk_div",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "DEFAULT_SCL_DIV",
+          "description": "Configures the I2C SCL phase timing derived from the FPGA/register clock.",
+          "fields": [
+            {
+              "name": "SCL_DIV",
+              "bits": "15:0",
+              "description": "SCL half-period divider. The I2C state machine advances each SCL phase every SCL_DIV + 1 FPGA clock cycles."
+            }
+          ]
+        },
+        {
+          "name": "slave_addr",
+          "offset": "0x000C",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Stores the 7-bit I2C target address used by the next transaction.",
+          "fields": [
+            {
+              "name": "SLAVE_ADDR",
+              "bits": "6:0",
+              "description": "Unshifted 7-bit I2C slave address. The core appends CONTROL.READ as the R/W bit during the address phase."
+            }
+          ]
+        },
+        {
+          "name": "tx_data",
+          "offset": "0x0010",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Stores the data byte used by the next I2C write transaction.",
+          "fields": [
+            {
+              "name": "TX_BYTE",
+              "bits": "7:0",
+              "description": "One byte transmitted after the slave address when CONTROL.READ is 0."
+            }
+          ]
+        },
+        {
+          "name": "rx_data",
+          "offset": "0x0014",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Returns the data byte captured by the most recent I2C read transaction.",
+          "fields": [
+            {
+              "name": "RX_BYTE",
+              "bits": "7:0",
+              "description": "One byte sampled from SDA during the data phase when CONTROL.READ is 1."
+            }
+          ]
+        }
       ]
     }
   ]

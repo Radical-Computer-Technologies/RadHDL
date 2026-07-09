@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 -- Register-controlled SPI master.
--- Provides a small software-visible register bank that launches single-word SPI transfers with programmable SCLK timing, chip-select polarity, clock polarity, and clock phase.
+-- Provides a small software-visible register bank that launches single-word, 4-wire SPI transfers with programmable SCLK timing, chip-select polarity, clock polarity, and clock phase.
 entity radif_reg_to_spi_master is
   generic (
     -- Width of the RADIF register data bus and the maximum SPI transfer word.
@@ -54,7 +54,7 @@ entity radif_reg_to_spi_master is
     spi_cs_n_o   : out std_logic;
     -- SPI master-out/slave-in data.
     spi_mosi_o   : out std_logic;
-    -- SPI master-in/slave-out data.
+    -- SPI master-in/slave-out data sampled into the RX_DATA register.
     spi_miso_i   : in  std_logic
   );
 end entity;
@@ -273,7 +273,7 @@ begin
             end if;
 
           when COMPLETE =>
-            rx_data_r <= shift_rx_r(DATA_WIDTH - 2 downto 0) & spi_miso_i;
+            rx_data_r <= shift_rx_r;
             status_r(1) <= '1';
             cs_n_r <= '1';
             state <= IDLE;

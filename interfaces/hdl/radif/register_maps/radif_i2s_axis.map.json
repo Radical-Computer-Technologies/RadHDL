@@ -16,32 +16,125 @@
           "name": "control",
           "offset": "0x0000",
           "access": "rw",
-          "description": "Control register for enabling receive and transmit datapaths and clearing sticky status.",
+          "reset": "0x00000000",
+          "description": "Controls the enabled audio datapaths and clears the software-visible transfer counters.",
           "fields": [
-            { "name": "I2S_TO_AXIS_EN", "bits": "0", "description": "Enables conversion from I2S serial input to AXI-Stream output." },
-            { "name": "AXIS_TO_I2S_EN", "bits": "1", "description": "Enables conversion from AXI-Stream input to I2S serial output." },
-            { "name": "CLEAR", "bits": "2", "description": "Clears status and transfer counters." }
+            {
+              "name": "I2S_TO_AXIS_EN",
+              "bits": "0",
+              "description": "Enables the I2S serial receive path. When set, completed left/right I2S samples are packed into AXI-Stream output frames."
+            },
+            {
+              "name": "AXIS_TO_I2S_EN",
+              "bits": "1",
+              "description": "Enables the I2S serial transmit path. When set, AXI-Stream input frames are accepted and shifted out as left/right I2S samples."
+            },
+            {
+              "name": "CLEAR",
+              "bits": "2",
+              "description": "Writing 1 clears RX_COUNT, TX_COUNT, and any sticky status bits. Software should write this as a pulse and then restore the desired enable bits."
+            }
           ]
         },
         {
           "name": "status",
           "offset": "0x0004",
           "access": "ro",
-          "description": "Runtime status and static clocking mode flags.",
+          "reset": "0x00000000",
+          "description": "Reports active transfer state and elaboration-time clocking modes for the I2S bridge.",
           "fields": [
-            { "name": "BUSY", "bits": "0", "description": "Indicates an RX frame is pending or a TX frame is loaded." },
-            { "name": "RX_STICKY", "bits": "1", "description": "Sticky receive activity flag." },
-            { "name": "ERR_STICKY", "bits": "2", "description": "Sticky configuration or runtime error flag." },
-            { "name": "EXT_MCLK", "bits": "8", "description": "Core was elaborated for external MCLK mode." },
-            { "name": "EXT_BCLK", "bits": "9", "description": "Core was elaborated for external BCLK/LRCK mode." },
-            { "name": "NO_MCLK", "bits": "10", "description": "Core was elaborated with no generated MCLK output." }
+            {
+              "name": "ACTIVE",
+              "bits": "0",
+              "description": "Set while an RX AXI-Stream frame is waiting to be accepted or a TX AXI-Stream frame is loaded for serial output."
+            },
+            {
+              "name": "EXT_MCLK_MODE",
+              "bits": "8",
+              "description": "Set when the core was elaborated with USE_EXTERNAL_MCLK true."
+            },
+            {
+              "name": "EXT_BCLK_MODE",
+              "bits": "9",
+              "description": "Set when the core was elaborated with USE_EXTERNAL_BCLK true and BCLK/LRCK are sampled from external pins."
+            },
+            {
+              "name": "NO_MCLK_MODE",
+              "bits": "10",
+              "description": "Set when the core was elaborated with NO_MCLK true and the generated MCLK output is disabled."
+            }
           ]
         },
-        { "name": "mclk_div", "offset": "0x0008", "access": "rw", "description": "Generated MCLK half-period divider. MCLK toggles every mclk_div + 1 FPGA clock cycles." },
-        { "name": "bclk_div", "offset": "0x000C", "access": "rw", "description": "Generated BCLK half-period divider. BCLK toggles every bclk_div + 1 FPGA clock cycles." },
-        { "name": "lrck_bits", "offset": "0x0010", "access": "rw", "description": "Number of BCLK rising edges per LRCK half-frame." },
-        { "name": "rx_count", "offset": "0x0014", "access": "ro", "description": "Number of stereo frames emitted on the AXI-Stream output." },
-        { "name": "tx_count", "offset": "0x0018", "access": "ro", "description": "Number of stereo frames consumed from the AXI-Stream input and shifted to I2S." }
+        {
+          "name": "mclk_div",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "DEFAULT_MCLK_DIV",
+          "description": "Generated MCLK divider used when the core owns MCLK generation.",
+          "fields": [
+            {
+              "name": "MCLK_DIV",
+              "bits": "15:0",
+              "description": "MCLK half-period divider. The generated MCLK output toggles every MCLK_DIV + 1 FPGA clock cycles when USE_EXTERNAL_MCLK and NO_MCLK are both false."
+            }
+          ]
+        },
+        {
+          "name": "bclk_div",
+          "offset": "0x000C",
+          "access": "rw",
+          "reset": "DEFAULT_BCLK_DIV",
+          "description": "Generated BCLK divider used when the core owns BCLK/LRCK generation.",
+          "fields": [
+            {
+              "name": "BCLK_DIV",
+              "bits": "15:0",
+              "description": "BCLK half-period divider. The generated BCLK output toggles every BCLK_DIV + 1 FPGA clock cycles when USE_EXTERNAL_BCLK is false."
+            }
+          ]
+        },
+        {
+          "name": "lrck_bits",
+          "offset": "0x0010",
+          "access": "rw",
+          "reset": "DEFAULT_LRCK_BITS",
+          "description": "Configures the generated LRCK frame length.",
+          "fields": [
+            {
+              "name": "LRCK_HALF_FRAME_BITS",
+              "bits": "15:0",
+              "description": "Number of BCLK rising edges in each LRCK half-frame. Typical I2S operation uses the sample slot width, such as 32 for 24-bit audio in 32-bit slots."
+            }
+          ]
+        },
+        {
+          "name": "rx_count",
+          "offset": "0x0014",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Counts stereo frames emitted by the I2S-to-AXI-Stream receive path.",
+          "fields": [
+            {
+              "name": "RX_FRAME_COUNT",
+              "bits": "31:0",
+              "description": "Monotonic count of completed left/right stereo frames presented on M_AXIS. Cleared by CONTROL.CLEAR or reset."
+            }
+          ]
+        },
+        {
+          "name": "tx_count",
+          "offset": "0x0018",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Counts stereo frames consumed by the AXI-Stream-to-I2S transmit path.",
+          "fields": [
+            {
+              "name": "TX_FRAME_COUNT",
+              "bits": "31:0",
+              "description": "Monotonic count of AXI-Stream stereo frames accepted and shifted out on I2S. Cleared by CONTROL.CLEAR or reset."
+            }
+          ]
+        }
       ]
     }
   ]

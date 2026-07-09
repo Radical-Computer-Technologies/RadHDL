@@ -5,8 +5,8 @@ use std.env.all;
 
 library radif;
 
--- Exercises the register-controlled SPI master with a looped-back MISO/MOSI path.
--- The waveform shows software register writes, chip-select assertion, generated SCLK pulses, MOSI shifting, and transaction completion status.
+-- Exercises the register-controlled 4-wire SPI master with a looped-back MISO/MOSI path.
+-- The waveform shows software register writes, chip-select assertion, generated SCLK pulses, MOSI output shifting, MISO input sampling, and transaction completion status.
 entity tb_radif_reg_to_spi_master is
 end entity;
 
@@ -99,6 +99,8 @@ begin
 
     reg_read(x"0004");
     assert reg_data_out(1) = '1' report "SPI transaction did not complete" severity failure;
+    reg_read(x"0014");
+    assert reg_data_out(7 downto 0) = x"A5" report "SPI MISO data was not captured into RX_DATA" severity failure;
     assert reg_error = '0' report "SPI register error asserted" severity failure;
     report "PASS tb_radif_reg_to_spi_master";
     finish;

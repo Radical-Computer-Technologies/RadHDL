@@ -16,38 +16,116 @@
           "name": "control",
           "offset": "0x0000",
           "access": "rw",
-          "description": "Control register used to launch and clear SPI transactions.",
+          "reset": "0x00000000",
+          "description": "Launches single-word SPI transfers and clears sticky completion/error status.",
           "fields": [
-            { "name": "START", "bits": "0", "description": "Starts a single-word SPI transfer when the master is idle." },
-            { "name": "CLEAR", "bits": "1", "description": "Clears sticky done and error status." }
+            {
+              "name": "START",
+              "bits": "0",
+              "description": "Writing 1 starts a SPI transfer when the master is idle. The transfer uses CONFIG, CLK_DIV, and TX_DATA values already written before START."
+            },
+            {
+              "name": "CLEAR",
+              "bits": "1",
+              "description": "Writing 1 clears STATUS.DONE and STATUS.ERR. Software should write this as a pulse when it wants fresh transaction status."
+            }
           ]
         },
         {
           "name": "status",
           "offset": "0x0004",
           "access": "ro",
-          "description": "SPI master transaction status.",
+          "reset": "0x00000000",
+          "description": "Reports current SPI transfer state and sticky completion/error status.",
           "fields": [
-            { "name": "BUSY", "bits": "0", "description": "Master is actively shifting an SPI transfer." },
-            { "name": "DONE", "bits": "1", "description": "Last SPI transfer completed." },
-            { "name": "ERR", "bits": "2", "description": "Start was requested while the master was busy or a register error occurred." }
+            {
+              "name": "BUSY",
+              "bits": "0",
+              "description": "Set while chip select is asserted or bits are actively being shifted on SCLK."
+            },
+            {
+              "name": "DONE",
+              "bits": "1",
+              "description": "Sticky completion bit set after the configured number of bits has been shifted and chip select is released."
+            },
+            {
+              "name": "ERR",
+              "bits": "2",
+              "description": "Sticky error bit set when START is requested while BUSY or an unsupported register access is attempted."
+            }
           ]
         },
-        { "name": "clk_div", "offset": "0x0008", "access": "rw", "description": "SCLK half-period divider. SCLK changes every clk_div + 1 FPGA clock cycles." },
+        {
+          "name": "clk_div",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "DEFAULT_SCLK_DIV",
+          "description": "Configures the SPI SCLK timing derived from the FPGA/register clock.",
+          "fields": [
+            {
+              "name": "SCLK_DIV",
+              "bits": "15:0",
+              "description": "SCLK half-period divider. The generated SCLK phase changes every SCLK_DIV + 1 FPGA clock cycles."
+            }
+          ]
+        },
         {
           "name": "config",
           "offset": "0x000C",
           "access": "rw",
-          "description": "SPI clock mode and transfer width configuration.",
+          "reset": "DEFAULT_BIT_COUNT << 8",
+          "description": "Configures SPI clock mode, chip-select polarity, and transfer width.",
           "fields": [
-            { "name": "CPOL", "bits": "0", "description": "SPI clock polarity." },
-            { "name": "CPHA", "bits": "1", "description": "SPI clock phase." },
-            { "name": "CS_ACTIVE_HIGH", "bits": "2", "description": "Inverts chip-select polarity when set." },
-            { "name": "BIT_COUNT", "bits": "15:8", "description": "Number of bits shifted in each transfer." }
+            {
+              "name": "CPOL",
+              "bits": "0",
+              "description": "SPI clock polarity. 0 idles SCLK low, 1 idles SCLK high."
+            },
+            {
+              "name": "CPHA",
+              "bits": "1",
+              "description": "SPI clock phase. 0 samples MISO on the first active clock edge, 1 samples MISO on the second active clock edge."
+            },
+            {
+              "name": "CS_ACTIVE_HIGH",
+              "bits": "2",
+              "description": "Chip-select polarity selector. 0 drives spi_cs_n_o low during transfers, 1 inverts the output polarity for active-high chip-select wiring."
+            },
+            {
+              "name": "BIT_COUNT",
+              "bits": "15:8",
+              "description": "Number of bits shifted during each transfer. Values below 1 clamp to 1 and values above DATA_WIDTH clamp to DATA_WIDTH."
+            }
           ]
         },
-        { "name": "tx_data", "offset": "0x0010", "access": "rw", "description": "MSB-first transmit word for the next SPI transfer." },
-        { "name": "rx_data", "offset": "0x0014", "access": "ro", "description": "MSB-first receive word captured from the last SPI transfer." }
+        {
+          "name": "tx_data",
+          "offset": "0x0010",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Stores the MSB-first MOSI transmit word used by the next SPI transfer. Reads return the transmit holding register, not sampled MISO data.",
+          "fields": [
+            {
+              "name": "TX_WORD",
+              "bits": "31:0",
+              "description": "MOSI transmit shift word. The core begins with TX_WORD[31], so transfers shorter than 32 bits should place the intended output payload in the most-significant bits."
+            }
+          ]
+        },
+        {
+          "name": "rx_data",
+          "offset": "0x0014",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Returns the MSB-first MISO receive word captured by the most recent SPI transfer.",
+          "fields": [
+            {
+              "name": "RX_WORD",
+              "bits": "31:0",
+              "description": "MISO receive shift word. For transfers shorter than 32 bits, sampled input bits are accumulated into the least-significant bits in transfer order after the configured number of clocks."
+            }
+          ]
+        }
       ]
     }
   ]
