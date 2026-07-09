@@ -939,30 +939,18 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .testbench-section {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 12px 0; }}
 .testbench-section > summary {{ cursor: pointer; padding: 10px 12px; font-weight: 700; }}
 .testbench-body {{ padding: 0 12px 12px; }}
-.wave {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); margin: 12px 0; --wave-zoom-x: 1; --wave-zoom-y: 1; }}
+.wave {{ width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--soft); margin: 12px 0; }}
 .wave h4 {{ margin: 0 0 8px; }}
 .wave-controls {{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 8px; color: var(--muted); font-size: 13px; }}
 .wave-controls label {{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }}
 .wave-controls input {{ width: 180px; accent-color: var(--accent); }}
 .wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
-.wave-canvas {{ display: flex; align-items: flex-start; min-width: max-content; }}
-.wave-labels {{ position: sticky; left: 0; z-index: 2; flex: 0 0 190px; width: 190px; max-width: none; height: var(--wave-height); background: var(--card); border-right: 1px solid var(--line); }}
-.wave-plot {{ flex: 0 0 var(--wave-plot-width, 894px); width: var(--wave-plot-width, 894px); min-width: var(--wave-plot-width, 894px); }}
-.waveform {{ display: block; width: 100%; max-width: none; height: var(--wave-height); background: var(--card); }}
-.wave-axis {{ stroke: var(--line); stroke-width: 1; }}
-.wave-grid {{ stroke: var(--line); stroke-width: 1; opacity: .65; }}
-.wave-grid.clock-grid {{ opacity: .45; }}
-.wave-grid.fallback-grid {{ stroke-dasharray: 4 4; }}
-.wave-hover-line {{ stroke: #ffd84d; stroke-width: 2; opacity: 0; pointer-events: none; }}
-.wave-hover-label {{ fill: #ffd84d; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; opacity: 0; pointer-events: none; }}
-.wave-label {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-.wave-time {{ fill: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-.wave-trace {{ fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }}
-.wave-bus {{ fill: rgba(98, 214, 199, .12); stroke: var(--accent); stroke-width: 1.2; }}
-.wave-bus-text {{ fill: var(--ink); font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-.wave-interface {{ fill: rgba(139, 211, 255, .13); stroke: #8bd3ff; stroke-width: 1.2; }}
-.wave-interface-text {{ fill: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }}
-.wave-unknown {{ stroke: #d59b35; }}
+.wave-stage {{ display: flex; align-items: flex-start; min-width: max-content; position: relative; background: var(--card); }}
+.wave-label-pane {{ position: sticky; left: 0; z-index: 3; flex: 0 0 190px; width: 190px; min-width: 190px; background: var(--card); border-right: 1px solid var(--line); }}
+.wave-label-row {{ position: absolute; left: 0; width: 180px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
+.wave-plot-pane {{ position: relative; flex: 0 0 auto; background: var(--card); }}
+.waveform-canvas {{ display: block; background: var(--card); }}
+.wave-hover-readout {{ position: sticky; left: 198px; bottom: 6px; display: inline-block; z-index: 4; margin: 0 0 6px 8px; border: 1px solid rgba(255, 216, 77, .45); border-radius: 4px; background: rgba(10, 15, 22, .86); color: #ffd84d; padding: 3px 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; pointer-events: none; }}
 .wave-group {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 10px 0; }}
 .wave-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
 .wave-group-body {{ padding: 0 10px 10px; }}
@@ -1660,84 +1648,208 @@ def waveform_script() -> str:
     wave.dataset.ready = "1";
     const zoomX = wave.querySelector(".wave-zoom-x");
     const zoomY = wave.querySelector(".wave-zoom-y");
-    const plotPane = wave.querySelector(".wave-plot");
-    const svg = wave.querySelector("svg.waveform");
-    const labelSvg = wave.querySelector("svg.wave-labels");
-    const hover = wave.querySelector(".wave-hover-line");
-    const hoverLabel = wave.querySelector(".wave-hover-label");
-    const labels = Array.from(wave.querySelectorAll(".wave-time"));
-    const grids = Array.from(wave.querySelectorAll(".wave-grid"));
-    const clockGrids = grids.filter((grid) => grid.dataset.clock === "1");
-    const snapGrids = clockGrids.length ? clockGrids : grids;
-    const plotWidth = svg ? Number(svg.dataset.plotWidth || 894) : 894;
-    const baseHeight = svg && svg.viewBox && svg.viewBox.baseVal ? Number(svg.viewBox.baseVal.height || 320) : 320;
-    const setZoom = () => {
-      const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
-      const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
-      wave.style.setProperty("--wave-zoom-x", String(valueX));
-      wave.style.setProperty("--wave-zoom-y", String(valueY));
-      const scaledWidth = `${plotWidth * valueX}px`;
-      wave.style.setProperty("--wave-plot-width", scaledWidth);
-      if (plotPane) {
-        plotPane.style.width = scaledWidth;
-        plotPane.style.minWidth = scaledWidth;
-        plotPane.style.flexBasis = scaledWidth;
-      }
-      if (svg) {
-        svg.style.width = "100%";
-        svg.style.height = `${baseHeight * valueY}px`;
-      }
-      if (labelSvg) {
-        labelSvg.style.height = `${baseHeight * valueY}px`;
-      }
-      const minSpacing = valueX >= 2.5 ? 38 : valueX >= 1.6 ? 52 : 78;
-      let lastShown = -Infinity;
-      labels.forEach((label) => {
-        const x = Number(label.dataset.x || label.getAttribute("x") || "0") * valueX;
-        if (x - lastShown >= minSpacing) {
-          label.style.display = "";
-          lastShown = x;
-        } else {
-          label.style.display = "none";
-        }
-      });
+    const canvas = wave.querySelector("canvas.waveform-canvas");
+    const plotPane = wave.querySelector(".wave-plot-pane");
+    const labelPane = wave.querySelector(".wave-label-pane");
+    const labelRows = Array.from(wave.querySelectorAll(".wave-label-row"));
+    const readout = wave.querySelector(".wave-hover-readout");
+    const dataNode = wave.querySelector("script.wave-data");
+    if (!canvas || !plotPane || !labelPane || !dataNode) return;
+    let payload;
+    try {
+      payload = JSON.parse(dataNode.textContent || "{}");
+    } catch (_) {
+      return;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const css = getComputedStyle(wave);
+    const colors = {
+      card: css.getPropertyValue("--card").trim() || "#111827",
+      line: css.getPropertyValue("--line").trim() || "#273244",
+      muted: css.getPropertyValue("--muted").trim() || "#93a4b8",
+      ink: css.getPropertyValue("--ink").trim() || "#e8eef7",
+      accent: css.getPropertyValue("--accent").trim() || "#62d6c7",
+      bus: "rgba(98, 214, 199, .14)",
+      iface: "rgba(139, 211, 255, .14)",
+      hover: "#ffd84d",
+      unknown: "#d59b35"
     };
-    setZoom();
-    if (zoomX) zoomX.addEventListener("input", setZoom);
-    if (zoomY) zoomY.addEventListener("input", setZoom);
-    if (!svg || !hover || !hoverLabel || !snapGrids.length) return;
-    const nearest = (x) => {
-      let best = snapGrids[0];
-      let bestDistance = Math.abs(Number(best.dataset.x) - x);
-      snapGrids.forEach((line) => {
-        const distance = Math.abs(Number(line.dataset.x) - x);
+    const basePlotWidth = Number(payload.basePlotWidth || 894);
+    const baseRowHeight = Number(payload.rowHeight || 34);
+    const top = Number(payload.top || 34);
+    const traceHeight = Number(payload.traceHeight || 16);
+    const endTime = Math.max(1, Number(payload.endTime || 1));
+    const signals = Array.isArray(payload.signals) ? payload.signals : [];
+    const ticks = Array.isArray(payload.ticks) ? payload.ticks : [];
+    const compactValue = (value) => {
+      const text = String(value || "").replaceAll("_", "");
+      if (!text) return "";
+      if (text.length > 8 && /^[01]+$/i.test(text)) return `0x${parseInt(text, 2).toString(16).toUpperCase()}`;
+      if (text.length > 18) return `${text.slice(0, 15)}...`;
+      return text.toUpperCase();
+    };
+    const isScalar = (signal) => signal.scalar === true;
+    const yForScalar = (value, highY, lowY) => {
+      const text = String(value || "").toLowerCase();
+      if (text === "1") return highY;
+      if (text === "0") return lowY;
+      return (highY + lowY) / 2;
+    };
+    let hoverTick = null;
+    const nearestTick = (x, plotWidth) => {
+      const snapTicks = ticks.length ? ticks : [{time: 0, label: "t=0"}, {time: endTime, label: `t=${endTime}`}];
+      let best = snapTicks[0];
+      let bestDistance = Infinity;
+      snapTicks.forEach((tick) => {
+        const tx = (Number(tick.time || 0) / endTime) * plotWidth;
+        const distance = Math.abs(tx - x);
         if (distance < bestDistance) {
-          best = line;
+          best = tick;
           bestDistance = distance;
         }
       });
       return best;
     };
-    svg.addEventListener("mousemove", (event) => {
-      const point = svg.createSVGPoint();
-      point.x = event.clientX;
-      point.y = event.clientY;
-      const matrix = svg.getScreenCTM();
-      if (!matrix) return;
-      const local = point.matrixTransform(matrix.inverse());
-      const line = nearest(local.x);
-      const x = Number(line.dataset.x);
-      hover.setAttribute("x1", x);
-      hover.setAttribute("x2", x);
-      hover.style.opacity = "1";
-      hoverLabel.setAttribute("x", x + 4);
-      hoverLabel.textContent = line.dataset.label || `t=${line.dataset.time}`;
-      hoverLabel.style.opacity = "1";
+    const draw = () => {
+      const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
+      const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
+      const plotWidth = Math.max(320, basePlotWidth * valueX);
+      const rowHeight = Math.max(18, baseRowHeight * valueY);
+      const height = Math.ceil(top + (signals.length * rowHeight) + 28);
+      const dpr = window.devicePixelRatio || 1;
+      plotPane.style.width = `${plotWidth}px`;
+      plotPane.style.minWidth = `${plotWidth}px`;
+      plotPane.style.flexBasis = `${plotWidth}px`;
+      plotPane.style.height = `${height}px`;
+      labelPane.style.height = `${height}px`;
+      canvas.style.width = `${plotWidth}px`;
+      canvas.style.height = `${height}px`;
+      canvas.width = Math.max(1, Math.ceil(plotWidth * dpr));
+      canvas.height = Math.max(1, Math.ceil(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, plotWidth, height);
+      ctx.fillStyle = colors.card;
+      ctx.fillRect(0, 0, plotWidth, height);
+      labelRows.forEach((row, index) => {
+        row.style.top = `${top + (index * rowHeight) + 5}px`;
+        row.style.height = `${Math.max(16, rowHeight - 2)}px`;
+        row.style.lineHeight = `${Math.max(16, rowHeight - 2)}px`;
+      });
+      ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textBaseline = "middle";
+      const minTickSpacing = valueX >= 2.8 ? 38 : valueX >= 1.7 ? 54 : 88;
+      let lastTickX = -Infinity;
+      ticks.forEach((tick, index) => {
+        const x = (Number(tick.time || 0) / endTime) * plotWidth;
+        ctx.strokeStyle = colors.line;
+        ctx.globalAlpha = tick.clock ? 0.45 : 0.62;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, height - 18);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        if (x - lastTickX >= minTickSpacing) {
+          ctx.fillStyle = colors.muted;
+          ctx.fillText(String(tick.tickLabel || tick.label || index), x + 3, 14);
+          lastTickX = x;
+        }
+      });
+      signals.forEach((signal, index) => {
+        const rowY = top + (index * rowHeight);
+        const traceY = rowY + Math.max(3, rowHeight * 0.12);
+        const traceH = Math.min(traceHeight, Math.max(10, rowHeight * 0.48));
+        const lowY = traceY + traceH;
+        const highY = traceY;
+        ctx.strokeStyle = colors.line;
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, lowY);
+        ctx.lineTo(plotWidth, lowY);
+        ctx.stroke();
+        const samples = Array.isArray(signal.samples) ? signal.samples : [];
+        if (signal.kind === "interface") {
+          ctx.fillStyle = colors.iface;
+          ctx.strokeStyle = "#8bd3ff";
+          ctx.lineWidth = 1.2;
+          ctx.fillRect(0, traceY - 1, plotWidth, traceH + 2);
+          ctx.strokeRect(0, traceY - 1, plotWidth, traceH + 2);
+          ctx.fillStyle = colors.ink;
+          ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          ctx.fillText(`${signal.name} interface (${signal.count || 0} signals)`, 8, traceY + (traceH / 2));
+          return;
+        }
+        if (!samples.length) return;
+        if (isScalar(signal)) {
+          let unknown = false;
+          ctx.beginPath();
+          samples.forEach((sample, sampleIndex) => {
+            const x = (Number(sample[0] || 0) / endTime) * plotWidth;
+            const y = yForScalar(sample[1], highY, lowY);
+            unknown = unknown || !["0", "1"].includes(String(sample[1]).toLowerCase());
+            if (sampleIndex === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              const previous = samples[sampleIndex - 1];
+              const previousY = yForScalar(previous[1], highY, lowY);
+              ctx.lineTo(x, previousY);
+              ctx.lineTo(x, y);
+            }
+          });
+          const last = samples[samples.length - 1];
+          ctx.lineTo(plotWidth, yForScalar(last[1], highY, lowY));
+          ctx.strokeStyle = unknown ? colors.unknown : colors.accent;
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+          return;
+        }
+        ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        samples.forEach((sample, sampleIndex) => {
+          const next = samples[sampleIndex + 1];
+          const x1 = (Number(sample[0] || 0) / endTime) * plotWidth;
+          const x2 = next ? (Number(next[0] || 0) / endTime) * plotWidth : plotWidth;
+          const width = Math.max(3, x2 - x1);
+          ctx.fillStyle = colors.bus;
+          ctx.strokeStyle = colors.accent;
+          ctx.lineWidth = 1.1;
+          ctx.fillRect(x1, traceY, width, traceH);
+          ctx.strokeRect(x1, traceY, width, traceH);
+          if (width >= 38) {
+            ctx.fillStyle = colors.ink;
+            ctx.fillText(compactValue(sample[1]), x1 + 5, traceY + (traceH / 2));
+          }
+        });
+      });
+      if (hoverTick) {
+        const x = (Number(hoverTick.time || 0) / endTime) * plotWidth;
+        ctx.strokeStyle = colors.hover;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 20);
+        ctx.lineTo(x, height - 18);
+        ctx.stroke();
+        if (readout) {
+          readout.hidden = false;
+          readout.textContent = hoverTick.label || `t=${hoverTick.time}`;
+        }
+      } else if (readout) {
+        readout.hidden = true;
+      }
+    };
+    draw();
+    if (zoomX) zoomX.addEventListener("input", draw);
+    if (zoomY) zoomY.addEventListener("input", draw);
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      hoverTick = nearestTick(x, rect.width);
+      draw();
     });
-    svg.addEventListener("mouseleave", () => {
-      hover.style.opacity = "0";
-      hoverLabel.style.opacity = "0";
+    canvas.addEventListener("mouseleave", () => {
+      hoverTick = null;
+      draw();
     });
+    window.addEventListener("resize", draw);
   });
 })();
 </script>
@@ -1776,10 +1888,9 @@ def group_wave_signals(signals: list[dict[str, Any]]) -> tuple[list[dict[str, An
     return overview, groups
 
 
-def render_waveform_svg(
+def waveform_json_payload(
     signals: list[dict[str, Any]],
     title: str,
-    source: str = "",
     max_signals: int = 96,
     grid_signals: list[dict[str, Any]] | None = None,
 ) -> str:
@@ -1791,47 +1902,77 @@ def render_waveform_svg(
         scale_signals = selected + [signal for signal in grid_signals if signal.get("samples")]
     end_time = max((time for signal in scale_signals for time, _ in signal["samples"]), default=1)
     end_time = max(1, end_time)
-    width = 1120
-    label_width = 190
-    plot_width = width - label_width - 36
+    plot_width = 894
     top = 34
     row_height = 34
     trace_height = 16
-    height = top + len(selected) * row_height + 28
-    grid = []
     ticks, clock_based = waveform_grid_times(grid_signals or selected, end_time)
-    grid_class = "wave-grid clock-grid" if clock_based else "wave-grid fallback-grid"
+    tick_payload = []
     for tick_index, time_value in enumerate(ticks):
-        x = (time_value / end_time) * plot_width
-        tick_label = f"C{tick_index}" if clock_based else str(time_value)
-        hover_label = f"cycle {tick_index}" if clock_based else f"t={time_value}"
-        grid.append(
-            f'<line class="{grid_class}" data-clock="{1 if clock_based else 0}" data-x="{x:.1f}" data-time="{time_value}" data-label="{html.escape(hover_label)}" '
-            f'x1="{x:.1f}" y1="20" x2="{x:.1f}" y2="{height - 18}" />'
+        tick_payload.append(
+            {
+                "time": int(time_value),
+                "clock": bool(clock_based),
+                "tickLabel": f"C{tick_index}" if clock_based else str(time_value),
+                "label": f"cycle {tick_index}" if clock_based else f"t={time_value}",
+            }
         )
-        grid.append(f'<text class="wave-time" data-tick="{tick_index}" data-x="{x + 3:.1f}" x="{x + 3:.1f}" y="15">{html.escape(tick_label)}</text>')
-    label_rows = []
-    plot_rows = []
-    for index, signal in enumerate(selected):
-        row_y = top + index * row_height
-        trace_y = row_y + 4
+    signal_payload = []
+    for signal in selected:
         label = str(signal["name"])
-        label_rows.append(f'<text class="wave-label" x="8" y="{row_y + 18}">{html.escape(label)}</text>')
-        plot_rows.append(f'<line class="wave-axis" x1="0" y1="{trace_y + trace_height}" x2="{plot_width}" y2="{trace_y + trace_height}" />')
-        samples = signal["samples"]
+        samples = [(int(time), normalize_wave_value(str(value))) for time, value in signal.get("samples", [])]
+        scalar = is_scalar_wave(samples)
         if signal.get("kind") == "interface":
-            plot_rows.append(f'<rect class="wave-interface" x="0" y="{trace_y - 1}" width="{plot_width}" height="{trace_height + 2}" rx="4" />')
-            plot_rows.append(
-                f'<text class="wave-interface-text" x="8" y="{trace_y + 12}">'
-                f'{html.escape(label)} interface ({int(signal.get("count", 0))} signals)</text>'
-            )
-        elif is_scalar_wave(samples):
-            path, unknown = scalar_wave_path(samples, end_time, 0, plot_width, trace_y, trace_height)
-            if path:
-                css = "wave-trace wave-unknown" if unknown else "wave-trace"
-                plot_rows.append(f'<path class="{css}" d="{path}" />')
+            waveform_samples = compact_wave_samples(samples, 128)
+        elif scalar:
+            waveform_samples = compact_wave_samples(samples, 1024)
         else:
-            plot_rows.append(render_bus_wave(samples, end_time, 0, plot_width, trace_y, trace_height))
+            waveform_samples = compact_wave_samples(samples, 256)
+        signal_payload.append(
+            {
+                "name": label,
+                "kind": signal.get("kind", "signal"),
+                "count": int(signal.get("count", 0) or 0),
+                "scalar": bool(scalar),
+                "samples": waveform_samples,
+            }
+        )
+    payload = {
+        "title": title,
+        "endTime": int(end_time),
+        "basePlotWidth": plot_width,
+        "top": top,
+        "rowHeight": row_height,
+        "traceHeight": trace_height,
+        "ticks": tick_payload,
+        "signals": signal_payload,
+    }
+    return json.dumps(payload, separators=(",", ":")).replace("</", "<\\/")
+
+
+def render_waveform_canvas(
+    signals: list[dict[str, Any]],
+    title: str,
+    source: str = "",
+    max_signals: int = 96,
+    grid_signals: list[dict[str, Any]] | None = None,
+) -> str:
+    selected = [signal for signal in signals if signal.get("samples")][:max_signals]
+    if not selected:
+        return ""
+    payload = waveform_json_payload(selected, title, max_signals=max_signals, grid_signals=grid_signals)
+    if not payload:
+        return ""
+    top = 34
+    row_height = 34
+    height = top + len(selected) * row_height + 28
+    label_rows = []
+    for index, signal in enumerate(selected):
+        row_y = top + index * row_height + 5
+        label_rows.append(
+            f'<div class="wave-label-row" style="top:{row_y}px;height:{row_height - 2}px;line-height:{row_height - 2}px">'
+            f'{html.escape(str(signal["name"]))}</div>'
+        )
     source_html = f'<p class="meta">Source: {html.escape(source)}</p>' if source else ""
     return (
         '<div class="wave">'
@@ -1841,18 +1982,17 @@ def render_waveform_svg(
         '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="420" value="100"></label>'
         '<label>Vertical <input class="wave-zoom-y" type="range" min="70" max="260" value="100"></label>'
         "</div>"
-        f'<div class="wave-viewport" style="--wave-height:{height}px">'
-        + '<div class="wave-canvas">'
-        + f'<svg class="wave-labels" viewBox="0 0 {label_width} {height}" aria-hidden="true">'
+        + '<div class="wave-viewport">'
+        + f'<div class="wave-stage" style="height:{height}px">'
+        + f'<div class="wave-label-pane" style="height:{height}px">'
         + "".join(label_rows)
-        + "</svg>"
-        + f'<div class="wave-plot" style="--wave-plot-width:{plot_width}px">'
-        + f'<svg class="waveform" data-plot-width="{plot_width}" viewBox="0 0 {plot_width} {height}" role="img" aria-label="{html.escape(title)}">'
-        + "".join(grid)
-        + "".join(plot_rows)
-        + f'<line class="wave-hover-line" x1="0" y1="20" x2="0" y2="{height - 18}" />'
-        + f'<text class="wave-hover-label" x="4" y="{height - 6}"></text>'
-        + "</svg></div></div></div>"
+        + "</div>"
+        + f'<div class="wave-plot-pane" style="width:894px;min-width:894px;height:{height}px">'
+        + f'<canvas class="waveform-canvas" width="894" height="{height}" aria-label="{html.escape(title)}"></canvas>'
+        + "</div>"
+        + '<span class="wave-hover-readout" hidden></span>'
+        + f'<script type="application/json" class="wave-data">{payload}</script>'
+        + "</div></div>"
         + waveform_script()
         + "</div>"
     )
@@ -1860,13 +2000,13 @@ def render_waveform_svg(
 
 def render_waveform_viewer(signals: list[dict[str, Any]], title: str, source: str) -> str:
     overview, groups = group_wave_signals(signals)
-    parts = [render_waveform_svg(overview, title, source, grid_signals=signals)]
+    parts = [render_waveform_canvas(overview, title, source, grid_signals=signals)]
     for key in sorted(groups):
         parts.append(
             '<details class="wave-group">'
             f"<summary>{html.escape(key)} interface signals</summary>"
             '<div class="wave-group-body">'
-            + render_waveform_svg(groups[key], f"{key} Interface Waveform", source, grid_signals=signals)
+            + render_waveform_canvas(groups[key], f"{key} Interface Waveform", source, grid_signals=signals)
             + "</div></details>"
         )
     return "".join(parts)

@@ -2,8 +2,8 @@
   "schema": "radhdl-docgen-plots-v1",
   "plots": [
     {
-      "title": "AM IQ 2048-Sample Envelope Recovery",
-      "description": "Input envelope and recovered demodulator envelope over the full 2048-sample frame.",
+      "title": "AM IQ Input Envelope",
+      "description": "Input amplitude envelope streamed into the AM IQ modulator over the full 2048-sample frame.",
       "style": "analog",
       "x_signal": "plot_index",
       "x_label": "Sample",
@@ -18,7 +18,22 @@
           "signal": "plot_env_in",
           "label": "Envelope In",
           "signed": true
-        },
+        }
+      ]
+    },
+    {
+      "title": "AM IQ Recovered Envelope",
+      "description": "Envelope recovered by the demodulator after IQ modulation and DDS-based baseband rotation.",
+      "style": "analog",
+      "x_signal": "plot_index",
+      "x_label": "Sample",
+      "x_min": 0,
+      "x_max": 2047,
+      "y_label": "Q14 amplitude",
+      "y_min": 0,
+      "y_max": 14000,
+      "max_points": 640,
+      "series": [
         {
           "signal": "plot_env_out",
           "label": "Envelope Out",
