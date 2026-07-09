@@ -28,8 +28,7 @@ RADHDL_API = [
 
 DEBUG_RADILA = [
     "debug/radila/hdl/radila/radila_core.vhd",
-    "debug/radila/hdl/radila/raddebughub_axi.vhd",
-    "debug/radila/hdl/radila/radila_axi_top.vhd",
+    "debug/radila/hdl/radila/raddebughub.vhd",
 ]
 
 DSP_RADDSP_RAW = [

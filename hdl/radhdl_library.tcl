@@ -23,8 +23,7 @@ namespace eval ::RadHDL {
     ]
     variable DEBUG_RADILA_FILES [list \
         [file join $::RadHDL::ROOT debug radila hdl radila radila_core.vhd] \
-        [file join $::RadHDL::ROOT debug radila hdl radila raddebughub_axi.vhd] \
-        [file join $::RadHDL::ROOT debug radila hdl radila radila_axi_top.vhd] \
+        [file join $::RadHDL::ROOT debug radila hdl radila raddebughub.vhd] \
     ]
     variable DSP_RADDSP_RAW_FILES [list \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_pkg.vhd] \

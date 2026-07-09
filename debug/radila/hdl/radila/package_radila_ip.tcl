@@ -40,13 +40,12 @@ set_property target_language VHDL [current_project]
 
 set rtl_files [list \
     [file join $script_dir radila_core.vhd] \
-    [file join $script_dir raddebughub_axi.vhd] \
-    [file join $script_dir radila_axi_top.vhd] \
+    [file join $script_dir raddebughub.vhd] \
 ]
 add_files -norecurse $rtl_files
 set_property library work [get_files $rtl_files]
 set_property file_type {VHDL 2008} [get_files $rtl_files]
-set_property top radila_v1_0 [current_fileset]
+set_property top RadDebugHub [current_fileset]
 update_compile_order -fileset sources_1
 
 ipx::package_project \
@@ -58,9 +57,9 @@ ipx::package_project \
     -import_files
 
 set core [ipx::current_core]
-set_property name radila $core
-set_property display_name {RadILA AXI-Lite Capture Core} $core
-set_property description {HDL-only AXI-Lite capture buffer with event trigger and BRAM readback} $core
+set_property name raddebughub $core
+set_property display_name {RadDebugHub RADIF Capture Core} $core
+set_property description {HDL-only RADIF register-target capture buffer with event trigger and BRAM readback} $core
 set_property version 1.0 $core
 set_property vendor_display_name {RCT} $core
 set_property supported_families {zynquplus Production zynq Production} $core
@@ -76,57 +75,25 @@ if {[file exists $bd_tcl_file]} {
     set_property type tclSource $bd_file
 }
 
-ipx::infer_bus_interface s00_axi_aclk xilinx.com:signal:clock_rtl:1.0 $core
-ipx::infer_bus_interface s00_axi_aresetn xilinx.com:signal:reset_rtl:1.0 $core
-set clk_bus [find_bus_interface_ci $core s00_axi_aclk]
-set rst_bus [find_bus_interface_ci $core s00_axi_aresetn]
-set axi_bus [find_bus_interface_ci $core S00_AXI]
-if {$axi_bus eq ""} {
-    set axi_bus [find_bus_interface_ci $core s00_axi]
-}
-if {$axi_bus eq ""} {
-    ipx::infer_bus_interface s00_axi xilinx.com:interface:aximm_rtl:1.0 $core
-    set axi_bus [find_bus_interface_ci $core s00_axi]
-}
-if {$axi_bus ne ""} {
-    set axi_bus_name [get_property name $axi_bus]
-    set_property interface_mode slave $axi_bus
-    set_property abstraction_type_vlnv xilinx.com:interface:aximm_rtl:1.0 $axi_bus
-    set_property bus_type_vlnv xilinx.com:interface:aximm:1.0 $axi_bus
-    if {$clk_bus ne ""} {
-        set assoc [ipx::get_bus_parameters ASSOCIATED_BUSIF -of_objects $clk_bus]
-        if {$assoc ne ""} {
-            set_property value $axi_bus_name $assoc
+ipx::infer_bus_interface sample_clk xilinx.com:signal:clock_rtl:1.0 $core
+ipx::infer_bus_interface reg_clk xilinx.com:signal:clock_rtl:1.0 $core
+ipx::infer_bus_interface sample_rstn xilinx.com:signal:reset_rtl:1.0 $core
+ipx::infer_bus_interface reg_rstn xilinx.com:signal:reset_rtl:1.0 $core
+foreach rst_name {sample_rstn reg_rstn} {
+    set rst_bus [find_bus_interface_ci $core $rst_name]
+    if {$rst_bus ne ""} {
+        set pol [ipx::get_bus_parameters POLARITY -of_objects $rst_bus]
+        if {$pol ne ""} {
+            set_property value ACTIVE_LOW $pol
         }
     }
 }
-if {$rst_bus ne ""} {
-    set pol [ipx::get_bus_parameters POLARITY -of_objects $rst_bus]
-    if {$pol ne ""} {
-        set_property value ACTIVE_LOW $pol
-    }
-}
 
-set mem_maps [ipx::get_memory_maps -of_objects $core]
-if {[llength $mem_maps] == 0 && $axi_bus ne ""} {
-    ipx::add_memory_map S00_AXI $core
-}
-set mem_map [lindex [ipx::get_memory_maps -of_objects $core] 0]
-if {$mem_map ne ""} {
-    set_property slave_memory_map_ref [get_property name $mem_map] $axi_bus
-    set blocks [ipx::get_address_blocks -of_objects $mem_map]
-    if {[llength $blocks] == 0} {
-        ipx::add_address_block S00_AXI_reg $mem_map
-        set blocks [ipx::get_address_blocks -of_objects $mem_map]
-    }
-    set block [lindex $blocks 0]
-    set_property name S00_AXI_reg $block
-    set_property range 64 $block
-    set_property width 32 $block
-    set_property usage register $block
-}
-
-foreach port_name {sample_i event_i irq_o} {
+foreach port_name {
+    sample_i event_i irq_o
+    reg_wr_addr reg_rd_addr reg_wr_en reg_rd_en reg_data_in reg_data_out
+    reg_wr_rdy reg_rd_rdy reg_wr_valid reg_rd_valid reg_error
+} {
     set port [ipx::get_ports $port_name -of_objects $core]
     if {$port ne ""} {
         set_property enablement_dependency {} $port
@@ -134,6 +101,8 @@ foreach port_name {sample_i event_i irq_o} {
 }
 
 foreach {param_name display_name description} {
+    DATA_WIDTH {Register Data Width} {Width of RADIF register data words}
+    REG_ADDR_WIDTH {Register Address Width} {Width of RADIF byte addresses}
     SAMPLE_WIDTH {Sample Width} {Total captured sample bus width in bits}
     EVENT_WIDTH {Event Width} {Total trigger/event bus width in bits}
     DEPTH {Capture Depth} {Number of samples stored in the RadILA dual-port capture RAM}
@@ -141,7 +110,6 @@ foreach {param_name display_name description} {
     CMD_LANES {Command Link Width} {Narrow command link width between RadDebugHub and RadILA}
     VENDOR_TAG {Vendor Tag} {Vendor selector used by generate blocks for vendor-specific primitives}
     PRODUCT_SERIES_TAG {Product Series Tag} {Device-family selector used by generate blocks for primitive choices}
-    G_DEBUG_BUS {Debug Bus} {Front-end bus selector: AXI_LITE, SPI, I2C, or LITEX_CSR}
 } {
     set user_param [ipx::get_user_parameters $param_name -of_objects $core]
     if {$user_param ne ""} {
@@ -158,4 +126,4 @@ if {[file exists $automation_tcl_file]} {
 }
 set_property ip_repo_paths $radila_ip_repo_dir [current_project]
 update_ip_catalog
-puts "Packaged user.org:user:radila:1.0"
+puts "Packaged user.org:user:raddebughub:1.0"

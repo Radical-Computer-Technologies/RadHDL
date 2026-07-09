@@ -1,6 +1,6 @@
 namespace eval rad_debug_hub {
     variable manifest_schema "radfpga.debughub.manifest.v1"
-    variable hub_vlnv "user.org:user:radila:1.0"
+    variable hub_vlnv "user.org:user:raddebughub:1.0"
 }
 
 proc rad_debug_hub::json_escape {value} {
@@ -183,7 +183,11 @@ proc rad_debug_hub::hide_debug_plumbing {{objects ""}} {
         set objects {}
         foreach cell [discover_cores] {
             lappend objects $cell
-            foreach pin {sample_i event_i irq_o s00_axi_aclk s00_axi_aresetn} {
+            foreach pin {
+                sample_i event_i irq_o sample_clk sample_rstn reg_clk reg_rstn
+                reg_wr_addr reg_rd_addr reg_wr_en reg_rd_en reg_data_in reg_data_out
+                reg_wr_rdy reg_rd_rdy reg_wr_valid reg_rd_valid reg_error
+            } {
                 set bd_pin [get_bd_pins -quiet $cell/$pin]
                 if {$bd_pin ne ""} {
                     set nets [get_bd_nets -quiet -of_objects $bd_pin]
@@ -252,7 +256,7 @@ proc rad_debug_hub::emit_manifest {path} {
         puts $fh "      \"cmd_lanes\": [config_value $cell CMD_LANES 4],"
         puts $fh "      \"vendor_tag\": [json_string [config_value $cell VENDOR_TAG XILINX]],"
         puts $fh "      \"product_series_tag\": [json_string [config_value $cell PRODUCT_SERIES_TAG 7SERIES]],"
-        puts $fh "      \"debug_bus\": [json_string [config_value $cell G_DEBUG_BUS AXI_LITE]],"
+        puts $fh "      \"register_interface\": \"RADIF\","
         puts $fh "      \"signals\": [string range [signals_json $signals 6] 6 end]"
         puts $fh "    }$comma"
         incr idx

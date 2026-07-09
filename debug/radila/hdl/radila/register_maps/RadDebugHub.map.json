@@ -1,0 +1,287 @@
+{
+  "name": "RadDebugHub",
+  "description": "Software-visible register map for the RADIF-controlled RadILA debug hub.",
+  "schema_version": 1,
+  "version": "0.2.1",
+  "data_width": 32,
+  "address_width": 16,
+  "regions": [
+    {
+      "name": "RadDebugHub",
+      "base": "0x0000",
+      "mask": "0xFFFF",
+      "description": "Controls RadILA capture arming, trigger matching, status reporting, and capture-buffer readback through the shared RADIF register interface.",
+      "registers": [
+        {
+          "name": "id",
+          "offset": "0x0000",
+          "access": "ro",
+          "reset": "0x52414449",
+          "description": "Constant ASCII identifier for the RadILA debug hub.",
+          "fields": [
+            {
+              "name": "ID",
+              "bits": "31:0",
+              "description": "Reads as 0x52414449, the ASCII tag RADI."
+            }
+          ]
+        },
+        {
+          "name": "version",
+          "offset": "0x0004",
+          "access": "ro",
+          "reset": "0x00020800",
+          "description": "Hardware register-map version and compatibility word.",
+          "fields": [
+            {
+              "name": "VERSION",
+              "bits": "31:0",
+              "description": "Encodes the debug hub register contract version used by host tools."
+            }
+          ]
+        },
+        {
+          "name": "control",
+          "offset": "0x0008",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Issues capture commands and configures optional interrupt and auto-rearm behavior.",
+          "fields": [
+            {
+              "name": "ARM",
+              "bits": "0",
+              "description": "Writing 1 arms the analyzer and starts capture when the trigger condition is met."
+            },
+            {
+              "name": "SW_TRIG",
+              "bits": "1",
+              "description": "Writing 1 injects a software trigger into the command stream."
+            },
+            {
+              "name": "CLEAR",
+              "bits": "2",
+              "description": "Writing 1 clears capture state, sticky done indication, counters, and command framing."
+            },
+            {
+              "name": "AUTO_REARM",
+              "bits": "3",
+              "description": "When set, the capture engine automatically returns to the armed state after completing a capture."
+            },
+            {
+              "name": "IRQ_EN",
+              "bits": "4",
+              "description": "When set, irq_o asserts while STATUS.DONE is set."
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "offset": "0x000C",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Reports analyzer state and captured sample count.",
+          "fields": [
+            {
+              "name": "ARMED",
+              "bits": "0",
+              "description": "Set while the analyzer is armed and waiting for a trigger."
+            },
+            {
+              "name": "CAPTURING",
+              "bits": "1",
+              "description": "Set while samples are being written into the capture buffer."
+            },
+            {
+              "name": "DONE",
+              "bits": "2",
+              "description": "Set after the configured capture window has completed."
+            },
+            {
+              "name": "OVERFLOW",
+              "bits": "3",
+              "description": "Set when capture activity exceeds the configured buffer accounting."
+            },
+            {
+              "name": "COUNT",
+              "bits": "31:16",
+              "description": "Number of samples captured or retained by the current capture window."
+            }
+          ]
+        },
+        {
+          "name": "trig_mask",
+          "offset": "0x0010",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Selects which event_i bits participate in hardware trigger comparison.",
+          "fields": [
+            {
+              "name": "TRIG_MASK",
+              "bits": "7:0",
+              "description": "A mask bit of 1 enables comparison for the corresponding event_i bit."
+            }
+          ]
+        },
+        {
+          "name": "trig_value",
+          "offset": "0x0014",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Expected event value after applying TRIG_MASK.",
+          "fields": [
+            {
+              "name": "TRIG_VALUE",
+              "bits": "7:0",
+              "description": "The analyzer triggers when event_i masked by TRIG_MASK equals this masked value."
+            }
+          ]
+        },
+        {
+          "name": "pretrig",
+          "offset": "0x0018",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Reserved pre-trigger depth configuration field retained for host API compatibility.",
+          "fields": [
+            {
+              "name": "PRETRIG",
+              "bits": "9:0",
+              "description": "Reserved for future pre-trigger capture-window selection."
+            }
+          ]
+        },
+        {
+          "name": "posttrig",
+          "offset": "0x001C",
+          "access": "rw",
+          "reset": "0x000000FF",
+          "description": "Number of post-trigger samples to capture after the trigger condition is accepted.",
+          "fields": [
+            {
+              "name": "POSTTRIG",
+              "bits": "9:0",
+              "description": "Post-trigger capture count. Values wider than ADDR_WIDTH are ignored by the configured hardware instance."
+            }
+          ]
+        },
+        {
+          "name": "data_index",
+          "offset": "0x0020",
+          "access": "rw",
+          "reset": "0x00000000",
+          "description": "Capture-buffer read index used by SAMPLE_DATA registers.",
+          "fields": [
+            {
+              "name": "DATA_INDEX",
+              "bits": "9:0",
+              "description": "Selects the capture-buffer sample address returned by SAMPLE_DATA0 through SAMPLE_DATA3."
+            }
+          ]
+        },
+        {
+          "name": "sample_data0",
+          "offset": "0x0024",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Low 32 bits of the captured sample selected by DATA_INDEX.",
+          "fields": [
+            {
+              "name": "SAMPLE_DATA0",
+              "bits": "31:0",
+              "description": "Captured sample bits 31 downto 0."
+            }
+          ]
+        },
+        {
+          "name": "sample_now0",
+          "offset": "0x0028",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Low 32 bits of the live sample input synchronized into the register clock domain.",
+          "fields": [
+            {
+              "name": "SAMPLE_NOW0",
+              "bits": "31:0",
+              "description": "Live sample_i bits 31 downto 0."
+            }
+          ]
+        },
+        {
+          "name": "event_now",
+          "offset": "0x002C",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Current event metadata synchronized into the register clock domain.",
+          "fields": [
+            {
+              "name": "EVENT_NOW",
+              "bits": "7:0",
+              "description": "Live event_i value observed by the analyzer."
+            }
+          ]
+        },
+        {
+          "name": "caps",
+          "offset": "0x0030",
+          "access": "ro",
+          "reset": "0x00200008",
+          "description": "Static hardware capability word for host discovery.",
+          "fields": [
+            {
+              "name": "EVENT_WIDTH",
+              "bits": "15:0",
+              "description": "Configured width of event_i in bits."
+            },
+            {
+              "name": "SAMPLE_WIDTH",
+              "bits": "31:16",
+              "description": "Configured width of sample_i in bits."
+            }
+          ]
+        },
+        {
+          "name": "sample_data1",
+          "offset": "0x0034",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Captured sample bits 63 downto 32 when SAMPLE_WIDTH is greater than 32.",
+          "fields": [
+            {
+              "name": "SAMPLE_DATA1",
+              "bits": "31:0",
+              "description": "Upper captured sample word for wider analyzer instances."
+            }
+          ]
+        },
+        {
+          "name": "sample_data2",
+          "offset": "0x0038",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Captured sample bits 95 downto 64 when SAMPLE_WIDTH is greater than 64.",
+          "fields": [
+            {
+              "name": "SAMPLE_DATA2",
+              "bits": "31:0",
+              "description": "Additional captured sample word for wide analyzer instances."
+            }
+          ]
+        },
+        {
+          "name": "sample_data3",
+          "offset": "0x003C",
+          "access": "ro",
+          "reset": "0x00000000",
+          "description": "Captured sample bits 127 downto 96 when SAMPLE_WIDTH is greater than 96.",
+          "fields": [
+            {
+              "name": "SAMPLE_DATA3",
+              "bits": "31:0",
+              "description": "Additional captured sample word for wide analyzer instances."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

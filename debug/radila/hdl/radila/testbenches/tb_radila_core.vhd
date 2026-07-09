@@ -9,50 +9,42 @@ entity tb_radila_core is
 end entity;
 
 architecture sim of tb_radila_core is
-  constant C_AXI_ADDR_WIDTH : integer := 6;
-  constant C_AXI_DATA_WIDTH : integer := 32;
+  constant C_REG_ADDR_WIDTH : integer := 16;
+  constant C_DATA_WIDTH     : integer := 32;
 
   signal sample_clk : std_logic := '0';
-  signal axi_clk    : std_logic := '0';
+  signal reg_clk    : std_logic := '0';
   signal sample_rstn: std_logic := '0';
-  signal axi_rstn   : std_logic := '0';
+  signal reg_rstn   : std_logic := '0';
   signal sample     : std_logic_vector(31 downto 0) := (others => '0');
   signal event_v    : std_logic_vector(7 downto 0) := (others => '0');
   signal irq        : std_logic;
 
-  signal awaddr     : std_logic_vector(C_AXI_ADDR_WIDTH - 1 downto 0) := (others => '0');
-  signal awprot     : std_logic_vector(2 downto 0) := (others => '0');
-  signal awvalid    : std_logic := '0';
-  signal awready    : std_logic;
-  signal wdata      : std_logic_vector(31 downto 0) := (others => '0');
-  signal wstrb      : std_logic_vector(3 downto 0) := (others => '1');
-  signal wvalid     : std_logic := '0';
-  signal wready     : std_logic;
-  signal bresp      : std_logic_vector(1 downto 0);
-  signal bvalid     : std_logic;
-  signal bready     : std_logic := '0';
-  signal araddr     : std_logic_vector(C_AXI_ADDR_WIDTH - 1 downto 0) := (others => '0');
-  signal arprot     : std_logic_vector(2 downto 0) := (others => '0');
-  signal arvalid    : std_logic := '0';
-  signal arready    : std_logic;
-  signal rdata      : std_logic_vector(31 downto 0);
-  signal rresp      : std_logic_vector(1 downto 0);
-  signal rvalid     : std_logic;
-  signal rready     : std_logic := '0';
+  signal reg_wr_addr  : std_logic_vector(C_REG_ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal reg_rd_addr  : std_logic_vector(C_REG_ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal reg_wr_en    : std_logic := '0';
+  signal reg_rd_en    : std_logic := '0';
+  signal reg_data_in  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
+  signal reg_data_out : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
+  signal reg_wr_rdy   : std_logic;
+  signal reg_rd_rdy   : std_logic;
+  signal reg_wr_valid : std_logic;
+  signal reg_rd_valid : std_logic;
+  signal reg_error    : std_logic;
 begin
   sample_clk <= not sample_clk after 3.5 ns;
-  axi_clk <= not axi_clk after 5 ns;
+  reg_clk <= not reg_clk after 5 ns;
 
   dut : entity work.RadDebugHub
     generic map (
-      C_S_AXI_DATA_WIDTH => C_AXI_DATA_WIDTH,
-      C_S_AXI_ADDR_WIDTH => C_AXI_ADDR_WIDTH,
+      DATA_WIDTH         => C_DATA_WIDTH,
+      REG_ADDR_WIDTH     => C_REG_ADDR_WIDTH,
       SAMPLE_WIDTH       => 32,
       EVENT_WIDTH        => 8,
       DEPTH              => 64,
       ADDR_WIDTH         => 6,
       CMD_LANES          => 4,
-      G_DEBUG_BUS        => "AXI_LITE"
+      VENDOR_TAG         => "GENERIC"
     )
     port map (
       sample_clk    => sample_clk,
@@ -60,27 +52,19 @@ begin
       sample_i      => sample,
       event_i       => event_v,
       irq_o         => irq,
-      S_AXI_ACLK    => axi_clk,
-      S_AXI_ARESETN => axi_rstn,
-      S_AXI_AWADDR  => awaddr,
-      S_AXI_AWPROT  => awprot,
-      S_AXI_AWVALID => awvalid,
-      S_AXI_AWREADY => awready,
-      S_AXI_WDATA   => wdata,
-      S_AXI_WSTRB   => wstrb,
-      S_AXI_WVALID  => wvalid,
-      S_AXI_WREADY  => wready,
-      S_AXI_BRESP   => bresp,
-      S_AXI_BVALID  => bvalid,
-      S_AXI_BREADY  => bready,
-      S_AXI_ARADDR  => araddr,
-      S_AXI_ARPROT  => arprot,
-      S_AXI_ARVALID => arvalid,
-      S_AXI_ARREADY => arready,
-      S_AXI_RDATA   => rdata,
-      S_AXI_RRESP   => rresp,
-      S_AXI_RVALID  => rvalid,
-      S_AXI_RREADY  => rready
+      reg_clk       => reg_clk,
+      reg_rstn      => reg_rstn,
+      reg_wr_addr   => reg_wr_addr,
+      reg_rd_addr   => reg_rd_addr,
+      reg_wr_en     => reg_wr_en,
+      reg_rd_en     => reg_rd_en,
+      reg_data_in   => reg_data_in,
+      reg_data_out  => reg_data_out,
+      reg_wr_rdy    => reg_wr_rdy,
+      reg_rd_rdy    => reg_rd_rdy,
+      reg_wr_valid  => reg_wr_valid,
+      reg_rd_valid  => reg_rd_valid,
+      reg_error     => reg_error
     );
 
   sample_stim : process
@@ -99,70 +83,64 @@ begin
     end loop;
   end process;
 
-  axi_stim : process
+  reg_stim : process
     variable rd : std_logic_vector(31 downto 0);
 
-    procedure axi_write(addr : natural; data : std_logic_vector(31 downto 0)) is
+    procedure reg_write(addr : natural; data : std_logic_vector(31 downto 0)) is
     begin
-      wait until rising_edge(axi_clk);
-      awaddr <= std_logic_vector(to_unsigned(addr, awaddr'length));
-      wdata <= data;
-      awvalid <= '1';
-      wvalid <= '1';
-      bready <= '1';
+      wait until rising_edge(reg_clk);
+      reg_wr_addr <= std_logic_vector(to_unsigned(addr, reg_wr_addr'length));
+      reg_data_in <= data;
+      reg_wr_en <= '1';
       loop
-        wait until rising_edge(axi_clk);
-        exit when awready = '1' and wready = '1';
+        wait until rising_edge(reg_clk);
+        exit when reg_wr_rdy = '1';
       end loop;
-      awvalid <= '0';
-      wvalid <= '0';
+      reg_wr_en <= '0';
       loop
-        wait until rising_edge(axi_clk);
-        exit when bvalid = '1';
+        wait until rising_edge(reg_clk);
+        exit when reg_wr_valid = '1';
       end loop;
-      bready <= '0';
-      assert bresp = "00" report "AXI write response error" severity failure;
+      assert reg_error = '0' report "register write response error" severity failure;
     end procedure;
 
-    procedure axi_read(addr : natural; variable data : out std_logic_vector(31 downto 0)) is
+    procedure reg_read(addr : natural; variable data : out std_logic_vector(31 downto 0)) is
     begin
-      wait until rising_edge(axi_clk);
-      araddr <= std_logic_vector(to_unsigned(addr, araddr'length));
-      arvalid <= '1';
-      rready <= '1';
+      wait until rising_edge(reg_clk);
+      reg_rd_addr <= std_logic_vector(to_unsigned(addr, reg_rd_addr'length));
+      reg_rd_en <= '1';
       loop
-        wait until rising_edge(axi_clk);
-        exit when arready = '1';
+        wait until rising_edge(reg_clk);
+        exit when reg_rd_rdy = '1';
       end loop;
-      arvalid <= '0';
+      reg_rd_en <= '0';
       loop
-        wait until rising_edge(axi_clk);
-        exit when rvalid = '1';
+        wait until rising_edge(reg_clk);
+        exit when reg_rd_valid = '1';
       end loop;
-      data := rdata;
-      rready <= '0';
-      assert rresp = "00" report "AXI read response error" severity failure;
+      data := reg_data_out;
+      assert reg_error = '0' report "register read response error" severity failure;
     end procedure;
   begin
     wait for 100 ns;
     sample_rstn <= '1';
-    axi_rstn <= '1';
+    reg_rstn <= '1';
     wait for 100 ns;
 
-    axi_read(16#00#, rd);
+    reg_read(16#00#, rd);
     assert rd = x"52414449" report "unexpected RadDebugHub ID" severity failure;
 
-    axi_write(16#10#, x"00000001");
+    reg_write(16#10#, x"00000001");
     wait for 250 ns;
-    axi_write(16#14#, x"00000001");
+    reg_write(16#14#, x"00000001");
     wait for 250 ns;
-    axi_write(16#1c#, x"00000006");
+    reg_write(16#1c#, x"00000006");
     wait for 250 ns;
-    axi_write(16#08#, x"00000001");
+    reg_write(16#08#, x"00000001");
 
     for i in 0 to 500 loop
       wait for 50 ns;
-      axi_read(16#0c#, rd);
+      reg_read(16#0c#, rd);
       if rd(2) = '1' then
         exit;
       end if;
@@ -174,15 +152,15 @@ begin
     assert rd(2) = '1' report "done bit was not set" severity failure;
     assert unsigned(rd(31 downto 16)) >= to_unsigned(6, 16) report "captured count too small" severity failure;
 
-    axi_write(16#20#, x"00000002");
+    reg_write(16#20#, x"00000002");
     wait for 100 ns;
-    axi_read(16#24#, rd);
+    reg_read(16#24#, rd);
     assert rd /= x"00000000" report "readback sample remained zero" severity failure;
 
-    axi_write(16#08#, x"00000004");
+    reg_write(16#08#, x"00000004");
     for i in 0 to 100 loop
       wait for 50 ns;
-      axi_read(16#0c#, rd);
+      reg_read(16#0c#, rd);
       if rd(2) = '0' then
         exit;
       end if;

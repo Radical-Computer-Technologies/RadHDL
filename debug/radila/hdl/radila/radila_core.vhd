@@ -68,6 +68,15 @@ architecture rtl of RadILA is
   type state_t is (IDLE, PREARMED, CAPTURE_POST, COMPLETE);
   constant CMD_WIDTH : integer := 4 + (2 * EVENT_WIDTH) + ADDR_WIDTH;
 
+  function default_posttrig(width : natural) return unsigned is
+    variable value : unsigned(width - 1 downto 0) := (others => '1');
+  begin
+    if width >= 8 then
+      return to_unsigned(255, width);
+    end if;
+    return value;
+  end function;
+
   signal state       : state_t := IDLE;
   signal wr_ptr      : unsigned(ADDR_WIDTH - 1 downto 0) := (others => '0');
   signal sample_cnt  : unsigned(ADDR_WIDTH downto 0) := (others => '0');
@@ -75,8 +84,10 @@ architecture rtl of RadILA is
   signal captured    : unsigned(ADDR_WIDTH downto 0) := (others => '0');
   signal overflow    : std_logic := '0';
   signal ram_we      : std_logic_vector(0 downto 0) := (others => '0');
+  signal ram_web_zero : std_logic_vector(0 downto 0) := (others => '0');
   signal wr_addr     : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
   signal rd_addr     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal ram_dinb_zero : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal unused_douta : std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
   signal trigger_match : std_logic;
   signal cmd_toggle_d : std_logic := '0';
@@ -89,7 +100,7 @@ architecture rtl of RadILA is
   signal auto_rearm   : std_logic := '0';
   signal trig_mask    : std_logic_vector(EVENT_WIDTH - 1 downto 0) := (others => '0');
   signal trig_value   : std_logic_vector(EVENT_WIDTH - 1 downto 0) := (others => '0');
-  signal posttrig     : unsigned(ADDR_WIDTH - 1 downto 0) := to_unsigned(255, ADDR_WIDTH);
+  signal posttrig     : unsigned(ADDR_WIDTH - 1 downto 0) := default_posttrig(ADDR_WIDTH);
 
   function cap_count(v : unsigned(ADDR_WIDTH - 1 downto 0)) return unsigned is
   begin
@@ -150,9 +161,9 @@ begin
         rstb           => not axi_rstn,
         enb            => '1',
         regceb         => '1',
-        web            => (others => '0'),
+        web            => ram_web_zero,
         addrb          => rd_addr,
-        dinb           => (others => '0'),
+        dinb           => ram_dinb_zero,
         injectsbiterrb => '0',
         injectdbiterrb => '0',
         doutb          => rd_data_o,
@@ -237,7 +248,7 @@ begin
         auto_rearm <= '0';
         trig_mask <= (others => '0');
         trig_value <= (others => '0');
-        posttrig <= to_unsigned(255, ADDR_WIDTH);
+        posttrig <= default_posttrig(ADDR_WIDTH);
       else
         next_ptr := wr_ptr + 1;
 
