@@ -1610,7 +1610,7 @@ def is_clock_wave_signal(signal: dict[str, Any]) -> bool:
     return name in {"clk", "clock", "aclk"} or name.endswith("_clk") or name.endswith("clk")
 
 
-def clock_grid_times(signals: list[dict[str, Any]], end_time: int) -> list[int]:
+def clock_grid_times(signals: list[dict[str, Any]], end_time: int) -> list[tuple[int, int]]:
     clocks = [signal for signal in signals if is_clock_wave_signal(signal) and is_scalar_wave(signal.get("samples", []))]
     if not clocks:
         return []
@@ -1624,19 +1624,20 @@ def clock_grid_times(signals: list[dict[str, Any]], end_time: int) -> list[int]:
     if len(rising) < 2:
         return []
     period = max(1, rising[1] - rising[0])
-    ticks = list(range(rising[0], end_time + period, period))
-    if len(ticks) > 240:
-        stride = max(1, len(ticks) // 240)
+    tick_times = list(range(rising[0], end_time + period, period))
+    ticks = [(time_value, cycle) for cycle, time_value in enumerate(tick_times)]
+    if len(ticks) > 20000:
+        stride = max(1, len(ticks) // 20000)
         ticks = ticks[::stride]
     return ticks
 
 
-def waveform_grid_times(signals: list[dict[str, Any]], end_time: int) -> tuple[list[int], bool]:
+def waveform_grid_times(signals: list[dict[str, Any]], end_time: int) -> tuple[list[tuple[int, int]], bool]:
     ticks = clock_grid_times(signals, end_time)
     if ticks:
         return ticks, True
     fallback = sorted({int(end_time * fraction) for fraction in (0, 0.25, 0.5, 0.75, 1)})
-    return fallback or [0], False
+    return [(time_value, index) for index, time_value in enumerate(fallback or [0])], False
 
 
 def waveform_script() -> str:
@@ -1748,7 +1749,7 @@ def waveform_script() -> str:
       });
       ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textBaseline = "middle";
-      const minTickSpacing = valueX >= 8 ? 28 : valueX >= 4 ? 34 : valueX >= 2.8 ? 42 : valueX >= 1.7 ? 54 : 88;
+      const minTickSpacing = valueX >= 20 ? 24 : valueX >= 12 ? 26 : valueX >= 8 ? 28 : valueX >= 4 ? 34 : valueX >= 2.8 ? 42 : valueX >= 1.7 ? 54 : 88;
       let lastTickX = -Infinity;
       ticks.forEach((tick, index) => {
         const x = (Number(tick.time || 0) / endTime) * plotWidth;
@@ -1918,13 +1919,14 @@ def waveform_json_payload(
     trace_height = 16
     ticks, clock_based = waveform_grid_times(grid_signals or selected, end_time)
     tick_payload = []
-    for tick_index, time_value in enumerate(ticks):
+    for time_value, cycle_index in ticks:
         tick_payload.append(
             {
                 "time": int(time_value),
                 "clock": bool(clock_based),
-                "tickLabel": f"C{tick_index}" if clock_based else str(time_value),
-                "label": f"cycle {tick_index}" if clock_based else f"t={time_value}",
+                "cycle": int(cycle_index),
+                "tickLabel": f"C{cycle_index}" if clock_based else str(time_value),
+                "label": f"cycle {cycle_index}" if clock_based else f"t={time_value}",
             }
         )
     signal_payload = []
@@ -1990,7 +1992,7 @@ def render_waveform_canvas(
         f"<h4>{html.escape(title)}</h4>"
         f"{source_html}"
         '<div class="wave-controls">'
-        '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="1600" value="100"></label>'
+        '<label>Horizontal <input class="wave-zoom-x" type="range" min="60" max="3000" value="100"></label>'
         '<label>Vertical <input class="wave-zoom-y" type="range" min="70" max="260" value="100"></label>'
         "</div>"
         + '<div class="wave-viewport">'
