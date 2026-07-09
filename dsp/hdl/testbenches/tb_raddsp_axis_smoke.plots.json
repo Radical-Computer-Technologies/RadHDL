@@ -1,0 +1,53 @@
+{
+  "schema": "radhdl-docgen-plots-v1",
+  "plots": [
+    {
+      "title": "Gain Core Response",
+      "description": "Input and output samples for the scalar AXI-stream gain core.",
+      "x_label": "Transaction sample",
+      "y_label": "Signed sample value",
+      "y_min": -256,
+      "y_max": 256,
+      "series": [
+        {"label": "Input", "points": [[0, 0], [1, 100]]},
+        {"label": "Output", "points": [[0, 0], [1, 200]]}
+      ]
+    },
+    {
+      "title": "FIR Two-Tap Accumulation",
+      "description": "Short impulse-style sequence showing the two-tap FIR summing current and prior samples.",
+      "x_label": "Transaction sample",
+      "y_label": "Signed sample value",
+      "y_min": -64,
+      "y_max": 64,
+      "series": [
+        {"label": "Input", "points": [[0, 0], [1, 10], [2, 20]]},
+        {"label": "FIR Output", "points": [[0, 0], [1, 10], [2, 30]]}
+      ]
+    },
+    {
+      "title": "Biquad Sequential Path",
+      "description": "Sequential-MAC biquad smoke response with feed-forward coefficient b0 set for unity behavior.",
+      "x_label": "Transaction sample",
+      "y_label": "Signed sample value",
+      "y_min": -128,
+      "y_max": 128,
+      "series": [
+        {"label": "Input", "points": [[0, 0], [1, 77]]},
+        {"label": "Output", "points": [[0, 0], [1, 77]]}
+      ]
+    },
+    {
+      "title": "Matrix Dot Product Output",
+      "description": "Dot-product smoke output and accumulated element count.",
+      "x_label": "Transaction sample",
+      "y_label": "Integer value",
+      "y_min": 0,
+      "y_max": 64,
+      "series": [
+        {"label": "Dot Product", "points": [[0, 0], [1, 31]]},
+        {"label": "Element Count", "points": [[0, 0], [1, 2]]}
+      ]
+    }
+  ]
+}

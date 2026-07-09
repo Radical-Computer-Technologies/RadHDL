@@ -1,0 +1,31 @@
+{
+  "schema": "radhdl-docgen-plots-v1",
+  "plots": [
+    {
+      "title": "Float to Q8.8 Fixed Conversion",
+      "description": "Directed IEEE-754 input values converted into signed Q8.8 fixed-point output codes.",
+      "x_label": "Float input value",
+      "x_min": -0.5,
+      "x_max": 1.0,
+      "y_label": "Q8.8 code",
+      "y_min": -160,
+      "y_max": 288,
+      "series": [
+        {"label": "Fixed Output", "points": [[-0.5, -128], [1.0, 256]]}
+      ]
+    },
+    {
+      "title": "Q8.8 Fixed to Float Conversion",
+      "description": "Directed signed Q8.8 input codes converted back into real-valued float equivalents.",
+      "x_label": "Q8.8 input code",
+      "x_min": -128,
+      "x_max": 512,
+      "y_label": "Float value",
+      "y_min": -0.75,
+      "y_max": 2.25,
+      "series": [
+        {"label": "Float Output", "points": [[-128, -0.5], [0, 0.0], [512, 2.0]]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "radhdl-docgen-plots-v1",
+  "plots": [
+    {
+      "title": "Unsigned Square-Root Sweep",
+      "description": "Pipelined square-root output over the directed input sweep.",
+      "x_signal": "recv_count",
+      "x_label": "Output sample",
+      "x_min": 0,
+      "x_max": 96,
+      "y_label": "Root",
+      "y_min": 0,
+      "y_max": 50000,
+      "series": [
+        {"signal": "root_o", "label": "sqrt(x)", "signed": false}
+      ]
+    }
+  ]
+}

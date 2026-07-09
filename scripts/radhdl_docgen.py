@@ -2113,11 +2113,32 @@ def downsample_points(points: list[tuple[float, float]], max_points: int) -> lis
     return selected
 
 
+def format_plot_tick(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.3g}"
+
+
 def render_plot_svg(plot: dict[str, Any], signals: list[dict[str, Any]]) -> str:
     signal_map = {base_signal_name(str(signal.get("name", ""))): signal for signal in signals}
     series_specs = [item for item in plot.get("series", []) if isinstance(item, dict)]
     if not series_specs:
         return ""
+    inline_series: list[tuple[dict[str, Any], list[tuple[float, float]]]] = []
+    for spec in series_specs:
+        raw_points = spec.get("points")
+        if not isinstance(raw_points, list):
+            continue
+        points: list[tuple[float, float]] = []
+        for item in raw_points:
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            try:
+                points.append((float(item[0]), float(item[1])))
+            except (TypeError, ValueError):
+                continue
+        if points:
+            inline_series.append((spec, points))
     x_signal_name = base_signal_name(str(plot.get("x_signal", "")))
     x_signal = signal_map.get(x_signal_name) if x_signal_name else None
     if x_signal:
@@ -2125,7 +2146,7 @@ def render_plot_svg(plot: dict[str, Any], signals: list[dict[str, Any]]) -> str:
     else:
         first_signal = signal_map.get(base_signal_name(str(series_specs[0].get("signal", ""))))
         x_samples = first_signal.get("samples", []) if first_signal else []
-    if not x_samples:
+    if not x_samples and not inline_series:
         return ""
 
     x_values: list[tuple[int, float]] = []
@@ -2137,11 +2158,13 @@ def render_plot_svg(plot: dict[str, Any], signals: list[dict[str, Any]]) -> str:
             x_values.append((time_value, float(numeric)))
         else:
             x_values.append((time_value, float(index)))
-    if not x_values:
+    if not x_values and not inline_series:
         return ""
 
-    x_min = float(plot.get("x_min", min(value for _, value in x_values)))
-    x_max = float(plot.get("x_max", max(value for _, value in x_values)))
+    inline_x_values = [x for _, points in inline_series for x, _ in points]
+    source_x_values = [value for _, value in x_values] + inline_x_values
+    x_min = float(plot.get("x_min", min(source_x_values)))
+    x_max = float(plot.get("x_max", max(source_x_values)))
     y_min = float(plot.get("y_min", 0))
     y_max = float(plot.get("y_max", 1))
     if x_max <= x_min:
@@ -2171,33 +2194,46 @@ def render_plot_svg(plot: dict[str, Any], signals: list[dict[str, Any]]) -> str:
         x = left + (plot_width * i / 5.0)
         value = x_min + ((x_max - x_min) * i / 5.0)
         grid.append(f'<line class="plot-grid" x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + plot_height}" />')
-        grid.append(f'<text class="plot-label" x="{x - 12:.1f}" y="{height - 18}">{value:.0f}</text>')
+        grid.append(f'<text class="plot-label" x="{x - 12:.1f}" y="{height - 18}">{html.escape(format_plot_tick(value))}</text>')
     for i in range(0, 5):
         y = top + (plot_height * i / 4.0)
         value = y_max - ((y_max - y_min) * i / 4.0)
         grid.append(f'<line class="plot-grid" x1="{left}" y1="{y:.1f}" x2="{left + plot_width}" y2="{y:.1f}" />')
-        grid.append(f'<text class="plot-label" x="8" y="{y + 4:.1f}">{value:.0f}</text>')
+        grid.append(f'<text class="plot-label" x="8" y="{y + 4:.1f}">{html.escape(format_plot_tick(value))}</text>')
 
     paths = []
     legends = []
     max_points = int(plot.get("max_points", 800) or 800)
     for series_index, spec in enumerate(series_specs):
-        signal = signal_map.get(base_signal_name(str(spec.get("signal", ""))))
-        if not signal:
-            continue
-        samples = sorted(signal.get("samples", []), key=lambda item: item[0])
-        signed_value = bool(spec.get("signed", False))
-        points: list[tuple[float, float]] = []
-        for time_value, x_value in x_values:
-            if x_value < x_min or x_value > x_max:
+        points = []
+        raw_points = spec.get("points")
+        if isinstance(raw_points, list):
+            for item in raw_points:
+                if not isinstance(item, (list, tuple)) or len(item) < 2:
+                    continue
+                try:
+                    x_value = float(item[0])
+                    y_value = float(item[1])
+                except (TypeError, ValueError):
+                    continue
+                if x_min <= x_value <= x_max:
+                    points.append((x_value, y_value))
+        else:
+            signal = signal_map.get(base_signal_name(str(spec.get("signal", ""))))
+            if not signal:
                 continue
-            raw_value = latest_wave_value(samples, time_value)
-            if raw_value is None:
-                continue
-            y_value = wave_numeric_value(raw_value, signed_value)
-            if y_value is None:
-                continue
-            points.append((x_value, float(y_value)))
+            samples = sorted(signal.get("samples", []), key=lambda item: item[0])
+            signed_value = bool(spec.get("signed", False))
+            for time_value, x_value in x_values:
+                if x_value < x_min or x_value > x_max:
+                    continue
+                raw_value = latest_wave_value(samples, time_value)
+                if raw_value is None:
+                    continue
+                y_value = wave_numeric_value(raw_value, signed_value)
+                if y_value is None:
+                    continue
+                points.append((x_value, float(y_value)))
         points = downsample_points(points, max_points)
         if len(points) < 2:
             continue
@@ -2495,7 +2531,8 @@ def render_testbenches(
                 sim_cache[bench.name] = status
             bench.simulation = status
         state = status.get("status", "not-run") if status else "not-run"
-        if run_sims and state != "passed":
+        reference_plots = render_directed_plots(root, bench.path, [])
+        if run_sims and state != "passed" and not reference_plots:
             continue
         artifact_links = []
         status_path = Path("..") / ".." / "simulations" / module_slug(bench.name) / "simulation_status.json"
@@ -2509,9 +2546,17 @@ def render_testbenches(
         elif not run_sims:
             waveform = render_port_waveform_sketch(module, bench.path)
         else:
-            waveform = ""
+            waveform = reference_plots
         artifact_html = f'<p class="meta">Artifacts: {", ".join(artifact_links)}</p>' if artifact_links else ""
-        status_label = "captured waveform" if status.get("vcd") and state == "passed" else "interface timing diagram" if waveform else "waveform unavailable"
+        status_label = (
+            "captured waveform"
+            if status.get("vcd") and state == "passed"
+            else "reference plots"
+            if reference_plots
+            else "interface timing diagram"
+            if waveform
+            else "waveform unavailable"
+        )
         parts.append(
             '<details class="testbench-section">'
             f'<summary>{html.escape(bench.name)} <span class="meta">{html.escape(status_label)}</span></summary>'

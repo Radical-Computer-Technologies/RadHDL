@@ -1,0 +1,32 @@
+{
+  "schema": "radhdl-docgen-plots-v1",
+  "plots": [
+    {
+      "title": "FFT Fingerprint Peak Tracking",
+      "description": "Selected bin index and running peak magnitude during fingerprint extraction.",
+      "x_signal": "bin_idx_r",
+      "x_label": "FFT bin",
+      "x_min": 0,
+      "x_max": 3,
+      "y_label": "Magnitude / bin",
+      "y_min": 0,
+      "y_max": 64,
+      "series": [
+        {"signal": "peak_mag_r", "label": "Peak Magnitude", "signed": false},
+        {"signal": "selected_r", "label": "Selected Bin", "signed": false},
+        {"signal": "peak_bin_r", "label": "Peak Bin", "signed": false}
+      ]
+    },
+    {
+      "title": "Fingerprint Match Count",
+      "description": "Matcher-side count of accepted fingerprint hits in the small directed table.",
+      "x_label": "Update sample",
+      "y_label": "Matches",
+      "y_min": 0,
+      "y_max": 4,
+      "series": [
+        {"signal": "match_count_r", "label": "Match Count", "signed": false}
+      ]
+    }
+  ]
+}

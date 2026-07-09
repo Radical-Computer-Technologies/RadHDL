@@ -1,0 +1,28 @@
+{
+  "schema": "radhdl-docgen-plots-v1",
+  "plots": [
+    {
+      "title": "CORDIC Atan2 Input Vectors",
+      "description": "Signed X/Y vectors swept through the atan2 pipeline.",
+      "x_label": "Vector sample",
+      "y_label": "Signed Q15 value",
+      "y_min": -32768,
+      "y_max": 32767,
+      "series": [
+        {"signal": "x_in", "label": "X", "signed": true},
+        {"signal": "y_in", "label": "Y", "signed": true}
+      ]
+    },
+    {
+      "title": "CORDIC Atan2 Phase Code",
+      "description": "Unsigned phase accumulator code emitted by the CORDIC after pipeline latency.",
+      "x_label": "Output sample",
+      "y_label": "Phase code",
+      "y_min": 0,
+      "y_max": 4294967295,
+      "series": [
+        {"signal": "phase_out", "label": "Phase", "signed": false}
+      ]
+    }
+  ]
+}
