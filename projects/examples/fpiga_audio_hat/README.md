@@ -1,104 +1,110 @@
-# FPiGA Audio Hat Gowin Port
+# FPiGA Audio Hat RadHDL Gowin Port
 
-This project tracks the RadHDL/RadBuild port of the FPiGA Audio Hat board
-design. The board source of truth remains the FPiGA Audio Hat repository; this
-example records how RadHDL consumes that platform and what RadBuild needs to
-drive Gowin EDA reproducibly.
+This project is the RadHDL-native port of the FPiGA Audio Hat board design. It
+uses the board pinout and constraints from the FPiGA Audio Hat repository, but
+the synthesized top is `radhdl_fpiga_audio_top` and its hierarchy is built from
+RADIF/RADDSP modules plus Gowin clock/output primitives.
 
-## Source Repositories
+## Build
 
-- Board source: `/media/jvincent/Kingspec512/repos/FPiGA-Audio-Hat`
-- Aggregate platform repo: `/media/jvincent/Kingspec512/repos/FPiGA`
-- Gowin install used for validation: `/home/jvincent/gowin`
+Run from the RadHDL repository root:
 
-The port intentionally preserves the FPiGA board constraint file:
+```sh
+projects/examples/fpiga_audio_hat/build_gowin.sh
+```
 
-- `hw_rev1_0/source/hdl/i2c_25k.cst`
-- `hw_rev1_0/source/hdl/clks.sdc`
+The script creates a Gowin project from RadHDL sources and imports:
 
-The successful headless Gowin build depends on the board's use of `E2` as
-`CLK_50M`. In the GW5A MBGA121N package this pin has `CPU/SSPI` alternate
-functions, so the generated project must set:
+- `/media/jvincent/Kingspec512/repos/FPiGA-Audio-Hat/hw_rev1_0/source/hdl/i2c_25k.cst`
+- `/media/jvincent/Kingspec512/repos/FPiGA-Audio-Hat/hw_rev1_0/source/hdl/clks.sdc`
+
+The board uses `E2` for `CLK_50M`. On the GW5A MBGA121N package that pin has
+CPU/SSPI alternate functions, so the generated project sets:
 
 - `set_option -use_sspi_as_gpio 1`
 - `set_option -use_cpu_as_gpio 1`
 
-## Validated Build
+## Validated Gowin Build
 
-Run from the FPiGA Audio Hat HDL directory:
+The RadHDL-native top has been synthesized and placed/routed with Gowin EDA
+V1.9.11.03 Education for `GW5A-LV25MG121NC1/I0`.
 
-```sh
-./build_gowin.sh
-```
+Generated artifacts:
 
-Validated result:
+| Artifact | Path | Size |
+| --- | --- | --- |
+| Bitstream | `build/gowin/radhdl_fpiga_audio/impl/pnr/radhdl_fpiga_audio.fs` | 5,948,235 bytes |
+| Binary | `build/gowin/radhdl_fpiga_audio/impl/pnr/radhdl_fpiga_audio.bin` | 742,063 bytes |
+| PnR report | `build/gowin/radhdl_fpiga_audio/impl/pnr/radhdl_fpiga_audio.rpt.txt` | 32,811 bytes |
 
-- Tool: Gowin EDA V1.9.11.03 Education
-- Part: `GW5A-LV25MG121NC1/I0`
-- Device version: `A`
-- Bitstream: `hw_rev1_0/source/hdl/build/gowin/fpiga_audio/impl/pnr/fpiga_audio.fs`
-- Binary: `hw_rev1_0/source/hdl/build/gowin/fpiga_audio/impl/pnr/fpiga_audio.bin`
-- PnR report: `hw_rev1_0/source/hdl/build/gowin/fpiga_audio/impl/pnr/fpiga_audio.rpt.txt`
+Resource usage:
 
-Current routed utilization:
+| Resource | Usage | Utilization |
+| --- | --- | --- |
+| Logic | 1,244 / 23,040 | 6% |
+| LUT | 1,035 | - |
+| ALU | 209 | - |
+| Register | 990 / 23,280 | 5% |
+| CLS | 1,078 / 11,520 | 10% |
+| I/O Port | 17 / 86 | 20% |
+| IOLOGIC | 1 / 80 | 2% |
+| DSP | 6 / 28 | 22% |
+| PLLA | 1 / 6 | 17% |
 
-- Logic: 1454/23040, 7%
-- LUT: 1287
-- ALU: 167
-- Registers: 1521/23280, 7%
-- BSRAM: 1/56, 2%
-- DSP: 2/28, 8%
-- I/O ports: 17/86, 20%
-- PLLA: 1/6, 17%
+The ADC interface is included in the placed design:
 
-## Clocking
+| Signal | Pin | Direction | Purpose |
+| --- | --- | --- | --- |
+| `I2S_BCK` | `J1` | Input | Shared I2S bit clock from the codec/Raspberry Pi path. |
+| `I2S_LRCK_ADC` | `L1` | Input | Codec ADC left/right clock. |
+| `I2S_SDA_ADC` | `L2` | Input | Codec ADC serial sample data into RadHDL. |
 
-The board uses a 50 MHz input oscillator on `CLK_50M`. The Gowin wrapper
-generates:
+## RadHDL Replacement Map
 
-- `MCLKXCO_OUT`: approximately 12.288786 MHz for the SSM2603 audio codec
-- `sysclk_i`: 100 MHz internal DSP/register clock
+The port replaces the board-local control/audio modules with RadHDL-owned
+building blocks:
 
-The software initializes the codec for 48 kHz audio and 24-bit I2S words. The
-HDL also references the codec/Raspberry Pi I2S bit clocks and frame clocks from
-the board pins.
+| Board function | RadHDL implementation |
+| --- | --- |
+| Raspberry Pi byte-register I2C control | `radif_i2c_byte_slave` |
+| Software-visible byte register map | `radhdl_fpiga_audio_top` register process |
+| Raspberry Pi I2S playback capture | `radif_i2s_axis` |
+| Codec ADC I2S capture | `radif_i2s_axis` |
+| Codec DAC I2S transmit | `radif_i2s_axis` |
+| Output gain | `raddsp_audio_stereo_gain` |
+| Synth mode | RadHDL-native phase accumulator in the board top |
+| MCLK/sysclk generation | Gowin `PLLA` primitive in the board top |
+| MCLK forwarding | Gowin `ODDR` primitive in the board top |
+
+The codec ADC path is wired into the design. `DSP_CONTROL[1]` selects ADC
+monitoring to the DAC path, and `DSP_CONTROL[2]` mixes codec ADC samples with
+Raspberry Pi playback before output gain.
 
 ## Software Contract
 
-The userspace library talks to the FPGA over `/dev/i2c-1` at address `0x12`.
-It also configures the SSM2603 codec at address `0x1b`.
+The existing userspace library talks to the FPGA over `/dev/i2c-1` at address
+`0x12`. The RadHDL top preserves the byte register transaction style used by
+that software: write one register address byte followed by data bytes, or write
+one register address byte and then read back sequential bytes.
 
 Key FPGA registers:
 
 | Offset | Name | Access | Description |
 | --- | --- | --- | --- |
-| `0x00` | `ID` | R | FPGA design ID. Current HDL default is `0x01`. |
-| `0x01` | `SOFT_RST` | R/W | Board reset control. The software releases reset with `0x01`. |
-| `0x02` | `SOFT_EN` | R/W | General enable control. The software enables the design with `0x01`. |
-| `0x03` | `CONF0` | R/W | I2S/audio routing mode. `0x01` is 48 kHz pass-through, `0x02` test, `0x03` DSP pass-through. |
-| `0x04` | `DSP_MODE` | R/W | DSP mode. `0x00` pass, `0x01` synth, `0x02` wavetable load. |
-| `0x05`-`0x07` | `FREQ0` | R/W | Oscillator 0 phase increment, little-endian 24-bit value. |
-| `0x08`-`0x0a` | `FREQ1` | R/W | Oscillator 1 phase increment, little-endian 24-bit value. |
-| `0x0b`-`0x0d` | `FREQ2` | R/W | Oscillator 2 phase increment, little-endian 24-bit value. |
-| `0x0e`-`0x10` | `FREQ3` | R/W | Oscillator 3 phase increment, little-endian 24-bit value. |
-| `0x11` | `OSC_WAVE_SELECT` | R/W | Four 2-bit wavetable selectors packed as oscillator 0 through 3. |
-| `0x12`-`0x13` | `VOICE_GATE` | R/W | 16-bit voice gate bitmap. |
-| `0x14` | `WAVE_STATUS/WAVE_CONTROL` | R/W | Read returns wavetable ready status. Write bit 0 pulses wavetable write enable and bits 2:1 select wavetable. |
-| `0x15`-`0x17` | `WAVE_DATA` | R/W | Little-endian 24-bit wavetable sample write data. |
-| `0x18` | `DSP_CONTROL` | R/W | DSP control flags. Bit 2 enables the mixer path in current software. |
-| `0x19`-`0x1b` | `LEFT_VOLUME` | R/W | Little-endian 24-bit left mixer volume. |
-| `0x1c`-`0x1e` | `RIGHT_VOLUME` | R/W | Little-endian 24-bit right mixer volume. |
-| `0x1f`-`0x21` | `OSC0_VOLUME` | R/W | Little-endian 24-bit oscillator 0 volume. |
-| `0x22`-`0x24` | `OSC1_VOLUME` | R/W | Little-endian 24-bit oscillator 1 volume. |
-| `0x25`-`0x27` | `OSC2_VOLUME` | R/W | Little-endian 24-bit oscillator 2 volume. |
-| `0x28`-`0x2a` | `OSC3_VOLUME` | R/W | Little-endian 24-bit oscillator 3 volume. |
+| `0x00` | `ID` | R | FPGA design ID. The RadHDL-native top returns `0x01`. |
+| `0x01` | `SOFT_RST` | R/W | Bit 0 releases the system datapath after PLL lock. |
+| `0x02` | `SOFT_EN` | R/W | Bit 0 drives board mute-enable. |
+| `0x03` | `CONF0` | R/W | Nonzero values enable DAC stream output. |
+| `0x04` | `DSP_MODE` | R/W | `0x00` passes Pi playback, `0x01` selects synth. |
+| `0x05`-`0x10` | `FREQ0..FREQ3` | R/W | Four 24-bit oscillator phase increments. |
+| `0x11` | `OSC_WAVE_SELECT` | R/W | Four packed 2-bit waveform selectors. |
+| `0x14` | `WAVE_STATUS/WAVE_CONTROL` | R/W | Read returns ready; writes preserve load sequencing. |
+| `0x18` | `DSP_CONTROL` | R/W | Bit 1 selects ADC monitor; bit 2 mixes ADC with Pi playback. |
+| `0x19`-`0x1e` | `LEFT_VOLUME`, `RIGHT_VOLUME` | R/W | 24-bit output gain coefficients. Zero maps to unity. |
+| `0x1f`-`0x2a` | `OSC0_VOLUME..OSC3_VOLUME` | R/W | 24-bit oscillator gain coefficients. |
 
-## Porting Notes
+## Scope
 
-The current board HDL references generated Gowin blocks by entity name:
-`fpiga_clks`, `WaveTableBram`, and `AUD_DSP_MULT`. The FPiGA port supplies
-source-controlled GW5A wrappers for those entities so the design can be built
-from command line without relying on opaque IDE-generated files.
-
-Future RadHDL work should move the reusable parts into vendor-aware RadHDL
-interfaces and keep the FPiGA board project as the integration example.
+This project is the board-level RadHDL port. The historical FPiGA HDL remains
+in the FPiGA Audio Hat repository as source/reference material, but this
+example build does not instantiate the board-local HDL modules.
