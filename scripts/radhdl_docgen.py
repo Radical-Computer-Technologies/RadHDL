@@ -945,12 +945,12 @@ pre {{ overflow: auto; padding: 14px; border-radius: 6px; background: var(--code
 .wave-controls label {{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }}
 .wave-controls input {{ width: 180px; accent-color: var(--accent); }}
 .wave-viewport {{ overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); resize: vertical; }}
-.wave-stage {{ display: flex; align-items: flex-start; min-width: max-content; position: relative; background: var(--card); }}
-.wave-label-pane {{ position: sticky; left: 0; z-index: 3; flex: 0 0 190px; width: 190px; min-width: 190px; background: var(--card); border-right: 1px solid var(--line); }}
+.wave-stage {{ display: grid; grid-template-columns: 190px 894px; align-items: start; width: fit-content; min-width: 100%; position: relative; background: var(--card); }}
+.wave-label-pane {{ position: sticky; left: 0; z-index: 3; width: 190px; min-width: 190px; background: var(--card); border-right: 1px solid var(--line); }}
 .wave-label-row {{ position: absolute; left: 0; width: 180px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
-.wave-plot-pane {{ position: relative; flex: 0 0 auto; background: var(--card); }}
+.wave-plot-pane {{ position: relative; background: var(--card); }}
 .waveform-canvas {{ display: block; background: var(--card); }}
-.wave-hover-readout {{ position: sticky; left: 198px; bottom: 6px; display: inline-block; z-index: 4; margin: 0 0 6px 8px; border: 1px solid rgba(255, 216, 77, .45); border-radius: 4px; background: rgba(10, 15, 22, .86); color: #ffd84d; padding: 3px 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; pointer-events: none; }}
+.wave-hover-readout {{ position: sticky; left: 198px; bottom: 6px; display: inline-block; z-index: 4; grid-column: 2; justify-self: start; margin: 0 0 6px 8px; border: 1px solid rgba(255, 216, 77, .45); border-radius: 4px; background: rgba(10, 15, 22, .86); color: #ffd84d; padding: 3px 6px; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; pointer-events: none; }}
 .wave-group {{ border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 10px 0; }}
 .wave-group > summary {{ cursor: pointer; padding: 8px 10px; font-weight: 700; }}
 .wave-group-body {{ padding: 0 10px 10px; }}
@@ -1648,13 +1648,15 @@ def waveform_script() -> str:
     wave.dataset.ready = "1";
     const zoomX = wave.querySelector(".wave-zoom-x");
     const zoomY = wave.querySelector(".wave-zoom-y");
+    const viewport = wave.querySelector(".wave-viewport");
+    const stage = wave.querySelector(".wave-stage");
     const canvas = wave.querySelector("canvas.waveform-canvas");
     const plotPane = wave.querySelector(".wave-plot-pane");
     const labelPane = wave.querySelector(".wave-label-pane");
     const labelRows = Array.from(wave.querySelectorAll(".wave-label-row"));
     const readout = wave.querySelector(".wave-hover-readout");
     const dataNode = wave.querySelector("script.wave-data");
-    if (!canvas || !plotPane || !labelPane || !dataNode) return;
+    if (!viewport || !stage || !canvas || !plotPane || !labelPane || !dataNode) return;
     let payload;
     try {
       payload = JSON.parse(dataNode.textContent || "{}");
@@ -1675,7 +1677,8 @@ def waveform_script() -> str:
       hover: "#ffd84d",
       unknown: "#d59b35"
     };
-    const basePlotWidth = Number(payload.basePlotWidth || 894);
+    const fallbackPlotWidth = Number(payload.basePlotWidth || 894);
+    const labelWidth = Number(payload.labelWidth || 190);
     const baseRowHeight = Number(payload.rowHeight || 34);
     const top = Number(payload.top || 34);
     const traceHeight = Number(payload.traceHeight || 16);
@@ -1714,13 +1717,20 @@ def waveform_script() -> str:
     const draw = () => {
       const valueX = zoomX ? Number(zoomX.value) / 100 : 1;
       const valueY = zoomY ? Number(zoomY.value) / 100 : 1;
-      const plotWidth = Math.max(320, basePlotWidth * valueX);
+      const visiblePlotWidth = Math.max(360, viewport.clientWidth - labelWidth);
+      const basePlotWidth = Math.max(fallbackPlotWidth, visiblePlotWidth);
+      const plotWidth = Math.max(240, basePlotWidth * valueX);
       const rowHeight = Math.max(18, baseRowHeight * valueY);
       const height = Math.ceil(top + (signals.length * rowHeight) + 28);
       const dpr = window.devicePixelRatio || 1;
+      stage.style.width = `${labelWidth + plotWidth}px`;
+      stage.style.minWidth = `${labelWidth + plotWidth}px`;
+      stage.style.height = `${height}px`;
+      stage.style.gridTemplateColumns = `${labelWidth}px ${plotWidth}px`;
+      labelPane.style.width = `${labelWidth}px`;
+      labelPane.style.minWidth = `${labelWidth}px`;
       plotPane.style.width = `${plotWidth}px`;
       plotPane.style.minWidth = `${plotWidth}px`;
-      plotPane.style.flexBasis = `${plotWidth}px`;
       plotPane.style.height = `${height}px`;
       labelPane.style.height = `${height}px`;
       canvas.style.width = `${plotWidth}px`;
@@ -1941,6 +1951,7 @@ def waveform_json_payload(
         "title": title,
         "endTime": int(end_time),
         "basePlotWidth": plot_width,
+        "labelWidth": 190,
         "top": top,
         "rowHeight": row_height,
         "traceHeight": trace_height,
