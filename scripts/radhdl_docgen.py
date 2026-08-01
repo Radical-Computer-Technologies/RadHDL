@@ -220,6 +220,10 @@ def strip_inline_comment(line: str) -> str:
 
 def category_for(path: Path, root: Path) -> str:
     parts = rel_path(path, root).split(os.sep)
+    if "common" in parts:
+        return "Primitives"
+    if len(parts) >= 3 and parts[0] == "hdl" and parts[1] == "radhdl":
+        return "API"
     if "dsp" in parts:
         return "DSP"
     if "interfaces" in parts:
@@ -233,6 +237,8 @@ def category_for(path: Path, root: Path) -> str:
 
 def library_for(path: Path, root: Path) -> str:
     parts = rel_path(path, root).split(os.sep)
+    if "common" in parts or (len(parts) >= 3 and parts[0] == "hdl" and parts[1] == "radhdl"):
+        return "radhdl"
     if any(candidate in parts for candidate in ("raddsp", "radif", "radila")):
         return "radhdl"
     if parts:
@@ -957,6 +963,15 @@ def module_slug(name: str) -> str:
 
 def source_package_group(module: ModuleDoc) -> str:
     parts = module.path.split("/")
+    name = module.name.lower()
+    if "common" in parts:
+        return "radprimitive"
+    if len(parts) >= 3 and parts[0] == "hdl" and parts[1] == "radhdl":
+        if name.startswith("radprimitive"):
+            return "radprimitive"
+        if name.startswith("radcdc"):
+            return "radcdc"
+        return "radhdl"
     if "iprepo" in parts:
         index = parts.index("iprepo")
         if index + 1 < len(parts):
@@ -1003,7 +1018,28 @@ def interface_include_package(module: ModuleDoc) -> str:
     return "interfaces"
 
 
+def primitive_package_group(module: ModuleDoc) -> str:
+    name = module.name.lower()
+    path = module.path.lower()
+    haystack = f"{name} {path}"
+    if "cdc" in haystack:
+        return "cdc"
+    if "fifo" in haystack:
+        return "fifo"
+    if any(token in haystack for token in ("ram", "dp16", "memory")):
+        return "ram"
+    if any(token in haystack for token in ("mult", "dsp")):
+        return "dsp"
+    if any(token in haystack for token in ("axi", "axis", "spi")):
+        return "protocol"
+    return "misc"
+
+
 def subpackage_group(module: ModuleDoc) -> str:
+    if module.category == "Primitives":
+        return f"primitive_{primitive_package_group(module)}"
+    if module.category == "API":
+        return source_package_group(module)
     if module.category == "DSP":
         return f"dsp_{dsp_package_group(module).lower()}"
     if module.category == "Interfaces":
@@ -1014,6 +1050,10 @@ def subpackage_group(module: ModuleDoc) -> str:
 
 
 def package_group(module: ModuleDoc) -> str:
+    if module.category == "Primitives":
+        return "Primitive"
+    if module.category == "API":
+        return "API"
     if module.category == "DSP":
         return dsp_package_group(module)
     return source_package_group(module)
@@ -2913,28 +2953,34 @@ def render_library_pages(modules: list[ModuleDoc], out: Path) -> None:
 
 
 def render_datasheet_browser(modules: list[ModuleDoc]) -> str:
-    preferred_categories = ["DSP", "Debug", "Interfaces"]
+    preferred_categories = ["Primitives", "DSP", "Debug", "Interfaces", "API"]
     discovered = sorted({module.category for module in modules if module.category not in preferred_categories})
     categories = [category for category in preferred_categories if any(module.category == category for module in modules)] + discovered
     collectors = sorted({collector_group(module) for module in modules}, key=lambda item: item.lower())
     subpackages = sorted({subpackage_group(module) for module in modules}, key=lambda item: item.lower())
-    collector_order = {"raddsp": 0, "radif": 1, "raddebug": 2}
+    collector_order = {"radprimitive": 0, "raddsp": 1, "radif": 2, "raddebug": 3, "radhdl": 4}
     subpackage_order = {
-        "dsp_comms": 0,
-        "dsp_transform": 1,
-        "dsp_matrix": 2,
-        "dsp_filter": 3,
-        "dsp_detection": 4,
-        "dsp_misc": 5,
-        "radif_axi": 10,
-        "radif_i2c": 11,
-        "radif_i2s": 12,
-        "radif_spi": 13,
-        "radif_smi": 14,
-        "radif_uart": 15,
-        "radif_regbank": 16,
-        "radif_misc": 17,
-        "radila": 20,
+        "primitive_ram": 0,
+        "primitive_fifo": 1,
+        "primitive_cdc": 2,
+        "primitive_dsp": 3,
+        "primitive_protocol": 4,
+        "primitive_misc": 5,
+        "dsp_comms": 10,
+        "dsp_transform": 11,
+        "dsp_matrix": 12,
+        "dsp_filter": 13,
+        "dsp_detection": 14,
+        "dsp_misc": 15,
+        "radif_axi": 20,
+        "radif_i2c": 21,
+        "radif_i2s": 22,
+        "radif_spi": 23,
+        "radif_smi": 24,
+        "radif_uart": 25,
+        "radif_regbank": 26,
+        "radif_misc": 27,
+        "radila": 30,
     }
     category_options = "".join(f'<option value="{html.escape(category)}">{html.escape(category)}</option>' for category in categories)
     collector_options = "".join(f'<option value="{html.escape(collector)}">{html.escape(collector)}</option>' for collector in collectors)
@@ -3182,7 +3228,7 @@ def render_type_docs(packages: list[PackageDoc], out: Path) -> None:
 """
         (type_dir / f"{module_slug(library)}.html").write_text(page(f"{library} Type Reference", body, depth=1), encoding="utf-8")
         index_rows.append(
-            f'<div class="datasheet-link-row"><a href="types/{module_slug(library)}.html">{html.escape(library)}</a>'
+            f'<div class="datasheet-link-row"><a href="{module_slug(library)}.html">{html.escape(library)}</a>'
             f'<span class="meta">{len(library_packages)} packages</span></div>'
         )
 
