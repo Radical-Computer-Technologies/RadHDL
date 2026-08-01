@@ -16,6 +16,8 @@ entity radif_reg_bank is
     READ_ONLY_REG_COUNT  : integer := 8;
     -- Configures READ WRITE REG COUNT for this instance.
     READ_WRITE_REG_COUNT : integer := 64;
+    -- Keeps source compatibility with register banks that optionally pipeline read responses.
+    PIPELINED_READ     : boolean := false;
     -- Selects the vendor-specific implementation path, usually XILINX for DSP48/XPM-backed builds or generic for portable RTL.
     VENDOR_TAG         : string  := "XILINX";
     -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.

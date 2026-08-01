@@ -48,11 +48,15 @@ architecture rtl of raddsp_audio_poly_synth is
   type state_t is (
     INIT_TABLE,
     IDLE,
+    HOST_CFG_WAIT,
     HOST_CFG_CAPTURE,
     PREP_VOICE,
     LOAD_FREQ,
+    WAIT_CTRL,
     LOAD_CTRL,
+    WAIT_VOLS,
     LOAD_VOLS,
+    WAIT_ADSR,
     LOAD_ADSR,
     UPDATE_PHASE,
     UPDATE_ENV_SELECT,
@@ -488,7 +492,7 @@ begin
         if cfg_rd_pending_r = '1' and state = IDLE then
           if cfg_addr_valid(cfg_rd_addr_r) then
             cfgmem_rd_addr <= cfg_mem_addr(cfg_rd_addr_r);
-            state <= HOST_CFG_CAPTURE;
+            state <= HOST_CFG_WAIT;
           else
             cfg_data_r <= (others => '0');
             cfg_rd_valid_r <= '1';
@@ -519,6 +523,9 @@ begin
               state <= PREP_VOICE;
             end if;
 
+          when HOST_CFG_WAIT =>
+            state <= HOST_CFG_CAPTURE;
+
           when HOST_CFG_CAPTURE =>
             cfg_data_r <= cfgmem_rd_data;
             cfg_rd_valid_r <= '1';
@@ -534,17 +541,27 @@ begin
 
           when LOAD_FREQ =>
             cur_freq <= unsigned(cfgmem_rd_data(PHASE_WIDTH - 1 downto 0));
+            cur_filter_state <= filter_rd_sample(filtermem_rd_hi, filtermem_rd_lo);
             cfgmem_rd_addr <= "01" & std_logic_vector(to_unsigned(voice_idx, 4));
+            state <= WAIT_CTRL;
+
+          when WAIT_CTRL =>
             state <= LOAD_CTRL;
 
           when LOAD_CTRL =>
             cur_ctrl <= cfgmem_rd_data;
             cfgmem_rd_addr <= "10" & std_logic_vector(to_unsigned(voice_idx, 4));
+            state <= WAIT_VOLS;
+
+          when WAIT_VOLS =>
             state <= LOAD_VOLS;
 
           when LOAD_VOLS =>
             cur_vols <= cfgmem_rd_data;
             cfgmem_rd_addr <= "11" & std_logic_vector(to_unsigned(voice_idx, 4));
+            state <= WAIT_ADSR;
+
+          when WAIT_ADSR =>
             state <= LOAD_ADSR;
 
           when LOAD_ADSR =>

@@ -32,7 +32,7 @@ end entity;
 
 architecture rtl of radhdl_fpiga_audio_top is
   constant C_UNITY_GAIN : std_logic_vector(17 downto 0) := std_logic_vector(to_signed(32767, 18));
-  constant C_CTRL_SLAVE_COUNT : integer := 3;
+  constant C_CTRL_SLAVE_COUNT : integer := 4;
   constant C_CTRL_LOW_RW_REG_COUNT : integer := 16;
   constant C_CTRL_HIGH_RW_REG_COUNT : integer := 16;
   constant C_CTRL_RO_REG_COUNT : integer := 8;
@@ -68,7 +68,7 @@ architecture rtl of radhdl_fpiga_audio_top is
   constant C_REG_EQ_SMOOTH     : natural := 94;
   constant C_REG_SCOPE_CONTROL : natural := 95;
   constant C_RPI_BCLK_DIV      : natural := 0;
-  constant C_RPI_LRCK_BITS     : natural := 32;
+  constant C_RPI_LRCK_BITS     : natural := 33;
   constant C_RPI_MARKER_PREFIX : std_logic_vector(3 downto 0) := x"A";
   constant C_HIGH_REG_LFO_CONTROL : natural := C_REG_LFO_CONTROL - 80;
   constant C_HIGH_LFO_FREQ_BASE : natural := C_LFO_FREQ_BASE - 80;
@@ -243,12 +243,18 @@ architecture rtl of radhdl_fpiga_audio_top is
   signal dac_axis_data  : std_logic_vector(63 downto 0);
   signal dac_axis_valid : std_logic;
   signal dac_axis_ready : std_logic;
+  signal audio_sample_tick : std_logic;
+  signal dac_source_data : std_logic_vector(63 downto 0);
+  signal dac_source_valid : std_logic := '0';
+  signal dac_pending_data : std_logic_vector(63 downto 0) := (others => '0');
+  signal dac_pending_valid : std_logic := '0';
   signal dac_sdata      : std_logic := '0';
 
   signal rpi_last_frame : std_logic_vector(63 downto 0) := (others => '0');
   signal adc_last_frame : std_logic_vector(63 downto 0) := (others => '0');
   signal selected_left  : std_logic_vector(23 downto 0) := (others => '0');
   signal selected_right : std_logic_vector(23 downto 0) := (others => '0');
+  signal selected_valid : std_logic := '0';
   signal gain_left      : std_logic_vector(23 downto 0);
   signal gain_right     : std_logic_vector(23 downto 0);
   signal gain_valid     : std_logic;
@@ -298,6 +304,7 @@ architecture rtl of radhdl_fpiga_audio_top is
   signal poly_cfg_addr  : std_logic_vector(7 downto 0) := (others => '0');
   signal poly_cfg_rd_en : std_logic := '0';
   signal poly_cfg_rd_addr : std_logic_vector(7 downto 0) := (others => '0');
+  signal poly_cfg_data : std_logic_vector(31 downto 0) := (others => '0');
   signal poly_cfg_rd_data : std_logic_vector(31 downto 0);
   signal poly_cfg_wr_valid : std_logic := '0';
   signal poly_cfg_rd_valid : std_logic;
@@ -370,6 +377,16 @@ architecture rtl of radhdl_fpiga_audio_top is
       return right_marker(0);
     end if;
     return fallback_lane;
+  end function;
+
+  function rpi_frame_left(frame : std_logic_vector(63 downto 0)) return std_logic_vector is
+  begin
+    return frame(63 downto 40);
+  end function;
+
+  function rpi_frame_right(frame : std_logic_vector(63 downto 0)) return std_logic_vector is
+  begin
+    return frame(31 downto 8);
   end function;
 
   function gain_or_unity(value : std_logic_vector(23 downto 0)) return std_logic_vector is
@@ -511,16 +528,26 @@ begin
   ctrl_ro_regs(6) <= adc_axis_data(31 downto 0);
   ctrl_ro_regs(7) <= scope_control_reg;
   ctrl_low_ro_dummy(0) <= (others => '0');
-  poly_cfg_wr_en <= ctrl_s_wr_en(1);
-  poly_cfg_addr <= "00" & ctrl_s_wr_addr(23 downto 18);
-  poly_cfg_rd_en <= ctrl_s_rd_en(1);
-  poly_cfg_rd_addr <= "00" & ctrl_s_rd_addr(23 downto 18);
+  poly_cfg_wr_en <= ctrl_s_wr_en(1) or ctrl_s_wr_en(2);
+  poly_cfg_addr <= "0011" & ctrl_s_wr_addr(37 downto 34) when ctrl_s_wr_en(2) = '1' else
+                   "00" & ctrl_s_wr_addr(23 downto 18);
+  poly_cfg_data <= ctrl_s_data_in(95 downto 64) when ctrl_s_wr_en(2) = '1' else
+                   ctrl_s_data_in(63 downto 32);
+  poly_cfg_rd_en <= ctrl_s_rd_en(1) or ctrl_s_rd_en(2);
+  poly_cfg_rd_addr <= "0011" & ctrl_s_rd_addr(37 downto 34) when ctrl_s_rd_en(2) = '1' else
+                      "00" & ctrl_s_rd_addr(23 downto 18);
   ctrl_s_wr_rdy(1) <= '1';
   ctrl_s_rd_rdy(1) <= '1';
   ctrl_s_wr_valid(1) <= poly_cfg_wr_valid;
   ctrl_s_rd_valid(1) <= poly_cfg_rd_valid;
   ctrl_s_error(1) <= poly_cfg_error;
   ctrl_s_data_out(63 downto 32) <= poly_cfg_rd_data;
+  ctrl_s_wr_rdy(2) <= '1';
+  ctrl_s_rd_rdy(2) <= '1';
+  ctrl_s_wr_valid(2) <= poly_cfg_wr_valid;
+  ctrl_s_rd_valid(2) <= poly_cfg_rd_valid;
+  ctrl_s_error(2) <= poly_cfg_error;
+  ctrl_s_data_out(95 downto 64) <= poly_cfg_rd_data;
 
   process(all)
     variable wr_word : unsigned(13 downto 0);
@@ -554,7 +581,7 @@ begin
       poly_cfg_wr_valid <= '0';
       if fabric_rstn = '0' then
         poly_cfg_wr_valid <= '0';
-      elsif ctrl_s_wr_en(1) = '1' then
+      elsif ctrl_s_wr_en(1) = '1' or ctrl_s_wr_en(2) = '1' then
         poly_cfg_wr_valid <= '1';
       end if;
     end if;
@@ -698,8 +725,8 @@ begin
       DATA_WIDTH => 32,
       ADDR_WIDTH => 16,
       SLAVE_COUNT => C_CTRL_SLAVE_COUNT,
-      SLAVE_BASE_ADDRS => x"014000400000",
-      SLAVE_ADDR_MASKS => x"FFC0FF00FFC0",
+      SLAVE_BASE_ADDRS => x"0140010000400000",
+      SLAVE_ADDR_MASKS => x"FFC0FFC0FF00FFC0",
       VENDOR_TAG => "GOWIN",
       PRODUCT_SERIES_TAG => "GW5A"
     )
@@ -771,19 +798,19 @@ begin
     port map (
       clk => sysclk_i,
       rstn => fabric_rstn,
-      wr_addr => ctrl_s_wr_addr(47 downto 32),
-      rd_addr => ctrl_s_rd_addr(47 downto 32),
-      wr_en => ctrl_s_wr_en(2),
-      rd_en => ctrl_s_rd_en(2),
-      data_in => ctrl_s_data_in(95 downto 64),
-      data_out => ctrl_s_data_out(95 downto 64),
+      wr_addr => ctrl_s_wr_addr(63 downto 48),
+      rd_addr => ctrl_s_rd_addr(63 downto 48),
+      wr_en => ctrl_s_wr_en(3),
+      rd_en => ctrl_s_rd_en(3),
+      data_in => ctrl_s_data_in(127 downto 96),
+      data_out => ctrl_s_data_out(127 downto 96),
       read_only_regs_i => ctrl_ro_regs,
       read_write_regs_o => ctrl_high_rw_regs,
-      wr_rdy => ctrl_s_wr_rdy(2),
-      rd_rdy => ctrl_s_rd_rdy(2),
-      wr_valid => ctrl_s_wr_valid(2),
-      rd_valid => ctrl_s_rd_valid(2),
-      error => ctrl_s_error(2)
+      wr_rdy => ctrl_s_wr_rdy(3),
+      rd_rdy => ctrl_s_rd_rdy(3),
+      wr_valid => ctrl_s_wr_valid(3),
+      rd_valid => ctrl_s_rd_valid(3),
+      error => ctrl_s_error(3)
     );
 
   u_dbg_i2c_reg_bridge : entity work.radif_i2c_slave_to_reg
@@ -849,7 +876,7 @@ begin
   process(sysclk_i)
   begin
     if rising_edge(sysclk_i) then
-      if rstn_i = '0' then
+      if adc_i2s_rstn = '0' or dac_i2s_rstn = '0' then
         cfg_count <= (others => '0');
         adc_cfg_wr_en <= '0';
         dac_cfg_wr_en <= '0';
@@ -934,8 +961,8 @@ begin
     right_sel := scope_control_reg(7 downto 4);
 
     case left_sel is
-      when x"1" => scope_left <= frame_left(rpi_lane0_frame);
-      when x"2" => scope_left <= frame_left(rpi_lane1_frame);
+      when x"1" => scope_left <= rpi_frame_left(rpi_lane0_frame);
+      when x"2" => scope_left <= rpi_frame_left(rpi_lane1_frame);
       when x"3" => scope_left <= frame_left(adc_last_frame);
       when x"4" => scope_left <= selected_left;
       when x"5" => scope_left <= gain_left;
@@ -949,8 +976,8 @@ begin
     end case;
 
     case right_sel is
-      when x"1" => scope_right <= frame_right(rpi_lane0_frame);
-      when x"2" => scope_right <= frame_right(rpi_lane1_frame);
+      when x"1" => scope_right <= rpi_frame_right(rpi_lane0_frame);
+      when x"2" => scope_right <= rpi_frame_right(rpi_lane1_frame);
       when x"3" => scope_right <= frame_right(adc_last_frame);
       when x"4" => scope_right <= selected_right;
       when x"5" => scope_right <= gain_right;
@@ -1128,7 +1155,7 @@ begin
     port map (
       clk => sysclk_i,
       rst => rst_i,
-      sample_ce_i => dac_axis_ready,
+      sample_ce_i => audio_sample_tick,
       phase_inc0_i => std_logic_vector(lfo_freq0),
       phase_inc1_i => std_logic_vector(lfo_freq1),
       phase_inc2_i => std_logic_vector(lfo_freq2),
@@ -1162,7 +1189,7 @@ begin
     port map (
       clk => sysclk_i,
       rst => rst_i,
-      sample_ce_i => dac_axis_ready,
+      sample_ce_i => audio_sample_tick,
       phase_inc0_i => osc0_freq_mod,
       phase_inc1_i => osc1_freq_mod,
       phase_inc2_i => osc2_freq_mod,
@@ -1221,10 +1248,10 @@ begin
     port map (
       clk => sysclk_i,
       rst => rst_i,
-      sample_ce_i => dac_axis_ready,
+      sample_ce_i => audio_sample_tick,
       cfg_wr_en_i => poly_cfg_wr_en,
       cfg_addr_i => poly_cfg_addr,
-      cfg_data_i => ctrl_s_data_in(63 downto 32),
+      cfg_data_i => poly_cfg_data,
       cfg_rd_en_i => poly_cfg_rd_en,
       cfg_rd_addr_i => poly_cfg_rd_addr,
       cfg_data_o => poly_cfg_rd_data,
@@ -1251,7 +1278,7 @@ begin
       eq_enable_i => eq_control_reg(0),
       left_i => selected_left,
       right_i => selected_right,
-      valid_i => '1',
+      valid_i => selected_valid,
       pan_i => global_pan_mod,
       left_gain_i => left_gain,
       right_gain_i => right_gain,
@@ -1323,13 +1350,13 @@ begin
           rpi_rx_lane0_pulse_sys <= '1';
         end if;
 
-        if dac_axis_ready = '1' then
+        if selected_valid = '1' then
           if dsp_mode = x"02" then
             rpi_tx_frame_sys <= pack_frame(poly_last_sample, poly_last_sample);
           elsif dsp_mode = x"01" then
             rpi_tx_frame_sys <= pack_frame(synth_left, synth_right);
           else
-            rpi_tx_frame_sys <= (others => '0');
+            rpi_tx_frame_sys <= pack_frame(rpi_frame_left(rpi_last_frame), rpi_frame_right(rpi_last_frame));
           end if;
           rpi_scope_frame_sys <= pack_frame(scope_left, scope_right);
           rpi_tx_toggle_sys <= not rpi_tx_toggle_sys;
@@ -1399,11 +1426,12 @@ begin
 
   rpi_tx_axis_data <= pack_pi_frame(frame_left(rpi_tx_frame_mclk),
                                     frame_right(rpi_tx_frame_mclk),
-                                    '0') when rpi_tx_lane = '0' else
+                                    '0') when dsp_mode = x"00" or rpi_tx_lane = '0' else
                       pack_pi_frame(frame_left(rpi_scope_frame_mclk),
                                     frame_right(rpi_scope_frame_mclk),
                                     '1');
   rpi_tx_axis_valid <= dac_enable_mclk_sync(2);
+  audio_sample_tick <= adc_axis_valid;
 
   process(all)
     variable rpi_l : signed(23 downto 0);
@@ -1413,37 +1441,66 @@ begin
     variable sum_l : signed(24 downto 0);
     variable sum_r : signed(24 downto 0);
   begin
-    rpi_l := signed(frame_left(rpi_last_frame));
-    rpi_r := signed(frame_right(rpi_last_frame));
+    rpi_l := signed(rpi_frame_left(rpi_last_frame));
+    rpi_r := signed(rpi_frame_right(rpi_last_frame));
     adc_l := signed(frame_left(adc_last_frame));
     adc_r := signed(frame_right(adc_last_frame));
     sum_l := resize(rpi_l, 25) + resize(adc_l, 25);
     sum_r := resize(rpi_r, 25) + resize(adc_r, 25);
 
     if dsp_mode = x"02" and dsp_control(3) = '1' then
-      selected_left <= frame_left(rpi_lane0_frame);
-      selected_right <= frame_right(rpi_lane0_frame);
+      selected_left <= rpi_frame_left(rpi_lane0_frame);
+      selected_right <= rpi_frame_right(rpi_lane0_frame);
+      selected_valid <= rpi_rx_lane0_pulse_sys;
     elsif dsp_mode = x"02" then
       selected_left <= poly_last_sample;
       selected_right <= poly_last_sample;
+      selected_valid <= poly_valid;
     elsif dsp_mode = x"01" and dsp_control(3) = '1' then
-      selected_left <= frame_left(rpi_lane0_frame);
-      selected_right <= frame_right(rpi_lane0_frame);
+      selected_left <= rpi_frame_left(rpi_lane0_frame);
+      selected_right <= rpi_frame_right(rpi_lane0_frame);
+      selected_valid <= rpi_rx_lane0_pulse_sys;
     elsif dsp_mode = x"01" then
       selected_left <= synth_left;
       selected_right <= synth_right;
+      selected_valid <= synth_pan_valid;
     elsif dsp_control(2) = '1' then
       selected_left <= std_logic_vector(resize(sum_l, 24));
       selected_right <= std_logic_vector(resize(sum_r, 24));
+      selected_valid <= adc_axis_valid or rpi_rx_lane0_pulse_sys;
     elsif dsp_control(1) = '1' then
-      selected_left <= frame_left(adc_last_frame);
-      selected_right <= frame_right(adc_last_frame);
+      selected_left <= frame_left(adc_axis_data);
+      selected_right <= frame_right(adc_axis_data);
+      selected_valid <= adc_axis_valid;
     else
-      selected_left <= frame_left(rpi_last_frame);
-      selected_right <= frame_right(rpi_last_frame);
+      selected_left <= rpi_frame_left(rpi_last_frame);
+      selected_right <= rpi_frame_right(rpi_last_frame);
+      selected_valid <= rpi_rx_lane0_pulse_sys;
     end if;
   end process;
 
-  dac_axis_data <= pack_frame(gain_left, gain_right);
-  dac_axis_valid <= gain_valid when dac_enable = '1' else '0';
+  dac_source_data <= pack_frame(selected_left, selected_right) when dsp_control(1) = '1' else
+                     pack_frame(gain_left, gain_right);
+  dac_source_valid <= selected_valid when dsp_control(1) = '1' else gain_valid;
+
+  process(sysclk_i)
+  begin
+    if rising_edge(sysclk_i) then
+      if rstn_i = '0' then
+        dac_pending_data <= (others => '0');
+        dac_pending_valid <= '0';
+      else
+        if dac_pending_valid = '1' and dac_axis_ready = '1' then
+          dac_pending_valid <= '0';
+        end if;
+        if dac_source_valid = '1' then
+          dac_pending_data <= dac_source_data;
+          dac_pending_valid <= '1';
+        end if;
+      end if;
+    end if;
+  end process;
+
+  dac_axis_data <= dac_pending_data;
+  dac_axis_valid <= dac_pending_valid when dac_enable = '1' else '0';
 end architecture;

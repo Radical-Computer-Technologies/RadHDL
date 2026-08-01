@@ -40,6 +40,9 @@ architecture rtl of radhdl_ram is
   constant C_IS_LATTICE : boolean :=
     VENDOR = "lattice" or VENDOR = "LATTICE" or VENDOR = "ecp5" or VENDOR = "ECP5" or
     DEVICE_FAMILY = "ecp5" or DEVICE_FAMILY = "ECP5";
+  constant C_IS_GOWIN : boolean :=
+    VENDOR = "gowin" or VENDOR = "GOWIN" or
+    DEVICE_FAMILY = "gw5a" or DEVICE_FAMILY = "GW5A";
 
   function xilinx_memory_style(kind : string) return string is
   begin
@@ -107,8 +110,8 @@ architecture rtl of radhdl_ram is
     );
   end component;
 begin
-  assert C_IS_XILINX or C_IS_LATTICE
-    report "radhdl_ram unsupported VENDOR; expected xilinx or lattice/ecp5"
+  assert C_IS_XILINX or C_IS_LATTICE or C_IS_GOWIN or SIMULATION
+    report "radhdl_ram unsupported VENDOR; expected xilinx, lattice/ecp5, gowin, or SIMULATION=true"
     severity failure;
   assert MODE = "tdp" or MODE = "TDP" or MODE = "sdp" or MODE = "SDP" or MODE = "sp" or MODE = "SP" or MODE = "rom" or MODE = "ROM"
     report "radhdl_ram MODE must be tdp, sdp, sp, or rom"
@@ -181,5 +184,57 @@ begin
         b_dout => b_dout,
         b_we => b_we_i
       );
+  end generate;
+
+  gen_behavioral : if (not C_IS_XILINX) and (not C_IS_LATTICE) generate
+    type ram_t is array (0 to DEPTH - 1) of std_logic_vector(DATA_WIDTH - 1 downto 0);
+    shared variable ram : ram_t := (others => (others => '0'));
+    signal a_dout_r : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
+    signal b_dout_r : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
+
+    function bounded_addr(addr : std_logic_vector) return natural is
+      variable idx : natural;
+    begin
+      idx := to_integer(unsigned(addr));
+      if idx >= DEPTH then
+        return DEPTH - 1;
+      end if;
+      return idx;
+    end function;
+  begin
+    a_dout <= a_dout_r;
+    b_dout <= b_dout_r;
+
+    process(clka)
+      variable idx : natural;
+    begin
+      if rising_edge(clka) then
+        if rsta = '1' then
+          a_dout_r <= (others => '0');
+        else
+          idx := bounded_addr(a_addr);
+          if a_we_i = '1' then
+            ram(idx) := a_din;
+          end if;
+          a_dout_r <= ram(idx);
+        end if;
+      end if;
+    end process;
+
+    process(clkb)
+      variable idx : natural;
+    begin
+      if rising_edge(clkb) then
+        if rstb = '1' then
+          b_dout_r <= (others => '0');
+        else
+          idx := bounded_addr(b_addr);
+          if b_we_i = '1' then
+            ram(idx) := b_din;
+          end if;
+          b_dout_r <= ram(idx);
+        end if;
+      end if;
+    end process;
   end generate;
 end architecture;

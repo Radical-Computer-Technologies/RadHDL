@@ -71,6 +71,7 @@ architecture rtl of radif_i2c_slave_to_reg is
   signal bit_count : unsigned(2 downto 0) := (others => '0');
   signal rx_shift  : std_logic_vector(7 downto 0) := (others => '0');
   signal tx_shift  : std_logic_vector(7 downto 0) := (others => '1');
+  signal tx_bit_oen : std_logic := '1';
   signal state     : state_t := IDLE;
   signal op_r      : std_logic_vector(7 downto 0) := (others => '0');
   signal addr_r    : std_logic_vector(15 downto 0) := (others => '0');
@@ -79,6 +80,7 @@ architecture rtl of radif_i2c_slave_to_reg is
   signal rd_addr_r : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
   signal wr_en_r   : std_logic := '0';
   signal rd_en_r   : std_logic := '0';
+  signal rd_wait_count : natural range 0 to 15 := 0;
   signal byte_index: natural range 0 to WORD_BYTES := 0;
   signal tx_index  : natural range 0 to WORD_BYTES := 0;
   signal tx_word   : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
@@ -106,7 +108,7 @@ architecture rtl of radif_i2c_slave_to_reg is
     return b;
   end function;
 begin
-  i2c_sda_oen <= sda_oen_r;
+  i2c_sda_oen <= tx_bit_oen when state = TX_DATA else sda_oen_r;
   reg_wr_addr <= wr_addr_r;
   reg_rd_addr <= rd_addr_r;
   reg_data_in <= wr_data_r;
@@ -149,14 +151,18 @@ begin
         selected <= '0';
         bit_count <= (others => '0');
         wr_data_r <= (others => '0');
+        tx_bit_oen <= '1';
+        rd_wait_count <= 0;
       elsif start_seen then
         state <= ADDR_BYTE;
         selected <= '0';
         bit_count <= (others => '0');
+        tx_bit_oen <= '1';
       elsif stop_seen then
         state <= IDLE;
         selected <= '0';
         bit_count <= (others => '0');
+        tx_bit_oen <= '1';
       else
         if scl_sync = '1' and scl_prev = '0' then
           rx_shift <= rx_shift(6 downto 0) & sda_sync;
@@ -169,7 +175,7 @@ begin
         end if;
 
         if scl_sync = '0' and scl_prev = '1' and state = TX_DATA then
-          sda_oen_r <= tx_shift(7);
+          tx_bit_oen <= tx_shift(7);
           tx_shift <= tx_shift(6 downto 0) & '1';
         end if;
 
@@ -184,6 +190,7 @@ begin
                 sda_oen_r <= '0';
                 if rx_byte(0) = '1' then
                   tx_shift <= byte_from_word(tx_word, 0);
+                  tx_bit_oen <= byte_from_word(tx_word, 0)(7);
                   tx_index <= 1;
                   state <= TX_DATA;
                 else
@@ -217,6 +224,7 @@ begin
               elsif op_r = RADIF_OP_REG_READ and reg_rd_rdy = '1' then
                 rd_addr_r <= resize_addr(next_addr);
                 rd_en_r <= '1';
+                rd_wait_count <= 0;
                 state <= WAIT_READ;
               else
                 state <= IDLE;
@@ -241,21 +249,26 @@ begin
               end if;
 
             when WAIT_READ =>
-              if reg_rd_valid = '1' then
+              if reg_rd_valid = '1' or rd_wait_count = 7 then
                 if reg_error = '1' then
                   tx_word <= (others => '0');
                 else
                   tx_word <= reg_data_out;
                 end if;
                 state <= IDLE;
+                rd_wait_count <= 0;
+              else
+                rd_wait_count <= rd_wait_count + 1;
               end if;
 
             when TX_DATA =>
               if tx_index < WORD_BYTES then
                 tx_shift <= byte_from_word(tx_word, tx_index);
+                tx_bit_oen <= byte_from_word(tx_word, tx_index)(7);
                 tx_index <= tx_index + 1;
               else
                 tx_shift <= x"00";
+                tx_bit_oen <= '0';
               end if;
           end case;
         end if;

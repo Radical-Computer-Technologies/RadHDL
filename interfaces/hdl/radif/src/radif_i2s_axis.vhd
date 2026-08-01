@@ -143,6 +143,7 @@ architecture rtl of radif_i2s_axis is
   signal lrck_sync      : std_logic := '0';
   signal lrck_prev      : std_logic := '0';
   signal bclk_rise      : std_logic := '0';
+  signal bclk_fall      : std_logic := '0';
   signal lrck_change    : std_logic := '0';
 
   signal rx_left        : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
@@ -154,6 +155,9 @@ architecture rtl of radif_i2s_axis is
 
   signal tx_axis_ready  : std_logic := '0';
   signal tx_loaded      : std_logic := '0';
+  signal tx_pending_valid : std_logic := '0';
+  signal tx_pending_left  : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
+  signal tx_pending_right : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal tx_left        : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal tx_right       : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal tx_shift       : std_logic_vector(SAMPLE_WIDTH - 1 downto 0) := (others => '0');
@@ -227,23 +231,38 @@ begin
   process(clk)
     variable idx : natural;
     variable bclk_rise_now : boolean;
+    variable bclk_fall_now : boolean;
     variable lrck_change_now : boolean;
   begin
     if rising_edge(clk) then
       bclk_rise_now := false;
+      bclk_fall_now := false;
       lrck_change_now := false;
       wr_valid_r <= '0';
       rd_valid_r <= '0';
       error_r <= '0';
       bclk_rise <= '0';
+      bclk_fall <= '0';
       lrck_change <= '0';
 
-      bclk_meta <= i2s_bclk_i;
-      bclk_sync <= bclk_meta;
-      bclk_prev <= bclk_sync;
-      lrck_meta <= i2s_lrck_i;
-      lrck_sync <= lrck_meta;
-      lrck_prev <= lrck_sync;
+      if USE_EXTERNAL_BCLK then
+        -- BCLK/LRCK are expected to be derived from the same audio MCLK for this
+        -- bridge. A two-cycle synchronizer at 12.288 MHz MCLK is too late for a
+        -- 3.072 MHz I2S BCLK edge, so use a single registered edge sample here.
+        bclk_meta <= i2s_bclk_i;
+        bclk_sync <= i2s_bclk_i;
+        bclk_prev <= bclk_sync;
+        lrck_meta <= i2s_lrck_i;
+        lrck_sync <= i2s_lrck_i;
+        lrck_prev <= lrck_sync;
+      else
+        bclk_meta <= i2s_bclk_i;
+        bclk_sync <= bclk_meta;
+        bclk_prev <= bclk_sync;
+        lrck_meta <= i2s_lrck_i;
+        lrck_sync <= lrck_meta;
+        lrck_prev <= lrck_sync;
+      end if;
 
       if rstn = '0' then
         control_r <= (others => '0');
@@ -262,6 +281,12 @@ begin
         rx_axis_valid <= '0';
         tx_axis_ready <= '0';
         tx_loaded <= '0';
+        tx_pending_valid <= '0';
+        tx_pending_left <= (others => '0');
+        tx_pending_right <= (others => '0');
+        tx_left <= (others => '0');
+        tx_right <= (others => '0');
+        tx_shift <= (others => '0');
         sdata_o_r <= '0';
       else
         if reg_wr_en = '1' then
@@ -342,6 +367,9 @@ begin
           if bclk_sync = '1' and bclk_prev = '0' then
             bclk_rise <= '1';
             bclk_rise_now := true;
+          elsif bclk_sync = '0' and bclk_prev = '1' then
+            bclk_fall <= '1';
+            bclk_fall_now := true;
           end if;
           if lrck_sync /= lrck_prev then
             lrck_change <= '1';
@@ -362,6 +390,9 @@ begin
               else
                 lrck_count <= lrck_count + 1;
               end if;
+            else
+              bclk_fall <= '1';
+              bclk_fall_now := true;
             end if;
           else
             bclk_count <= bclk_count - 1;
@@ -373,13 +404,12 @@ begin
         end if;
 
         tx_axis_ready <= '0';
-        if ENABLE_AXIS_TO_I2S and control_r(1) = '1' and tx_loaded = '0' then
+        if ENABLE_AXIS_TO_I2S and control_r(1) = '1' and tx_pending_valid = '0' then
           tx_axis_ready <= '1';
           if s_axis_tvalid = '1' then
-            tx_left <= unpack_left(s_axis_tdata);
-            tx_right <= unpack_right(s_axis_tdata);
-            tx_loaded <= '1';
-            tx_bit_count <= 0;
+            tx_pending_left <= unpack_left(s_axis_tdata);
+            tx_pending_right <= unpack_right(s_axis_tdata);
+            tx_pending_valid <= '1';
             tx_axis_ready <= '0';
           end if;
         end if;
@@ -405,20 +435,34 @@ begin
             end if;
           end if;
 
-          if ENABLE_AXIS_TO_I2S and control_r(1) = '1' and tx_loaded = '1' then
+          if ENABLE_AXIS_TO_I2S and control_r(1) = '1' then
             if lrck_change_now then
               tx_bit_count <= 0;
               if (USE_EXTERNAL_BCLK and lrck_sync = '0') or ((not USE_EXTERNAL_BCLK) and lrck_r = '0') then
-                tx_shift <= tx_left;
+                if tx_pending_valid = '1' then
+                  tx_left <= tx_pending_left;
+                  tx_right <= tx_pending_right;
+                  tx_shift <= tx_pending_left;
+                  tx_pending_valid <= '0';
+                  tx_loaded <= '1';
+                else
+                  tx_shift <= (others => '0');
+                  tx_loaded <= '0';
+                end if;
               else
                 tx_shift <= tx_right;
               end if;
-            elsif tx_bit_count < SAMPLE_WIDTH then
+            end if;
+          end if;
+        end if;
+
+        if bclk_fall_now then
+          if ENABLE_AXIS_TO_I2S and control_r(1) = '1' then
+            if tx_loaded = '1' and tx_bit_count < SAMPLE_WIDTH then
               sdata_o_r <= tx_shift(SAMPLE_WIDTH - 1);
               tx_shift <= tx_shift(SAMPLE_WIDTH - 2 downto 0) & '0';
               tx_bit_count <= tx_bit_count + 1;
               if tx_bit_count = SAMPLE_WIDTH - 1 and ((USE_EXTERNAL_BCLK and lrck_sync = '1') or ((not USE_EXTERNAL_BCLK) and lrck_r = '1')) then
-                tx_loaded <= '0';
                 tx_count_r <= tx_count_r + 1;
               end if;
             end if;
