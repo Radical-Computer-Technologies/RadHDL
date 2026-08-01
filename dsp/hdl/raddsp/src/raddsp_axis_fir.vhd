@@ -177,8 +177,9 @@ begin
 
     gen_mul_lanes : for lane in 0 to C_DSP_LANES - 1 generate
     begin
-      dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
+      dsp_mul_i: entity work.raddsp_mul
         generic map (
+          VENDOR => VENDOR,
           DEVICE_FAMILY => DEVICE_FAMILY,
           A_WIDTH => DATA_WIDTH,
           B_WIDTH => TAP_WIDTH

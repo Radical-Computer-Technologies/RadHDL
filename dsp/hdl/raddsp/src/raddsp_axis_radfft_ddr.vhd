@@ -175,8 +175,12 @@ entity raddsp_axis_radfft_ddr is
 end entity;
 
 architecture rtl of raddsp_axis_radfft_ddr is
-  component xpm_fifo_sync
+  component radhdl_fifo
     generic (
+      VENDOR              : string  := "xilinx";
+      DEVICE_FAMILY       : string  := "7series";
+      FIFO_MODE           : string  := "sync";
+      ASYNC               : boolean := false;
       -- Configures CASCADE HEIGHT for this instance.
       CASCADE_HEIGHT      : integer := 0;
       -- Configures DOUT RESET VALUE for this instance.
@@ -259,6 +263,8 @@ architecture rtl of raddsp_axis_radfft_ddr is
       rst           : in  std_logic;
       -- Sleep interface signal.
       sleep         : in  std_logic;
+      -- Optional read clock for asynchronous FIFO mode.
+      rd_clk        : in  std_logic := '0';
       -- Clock for the associated synchronous logic and handshake domain.
       wr_clk        : in  std_logic;
       -- Wr en interface signal.
@@ -935,8 +941,9 @@ begin
       frame_done_o => ifft_frame_done
     );
 
-  corr_product_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+  corr_product_mul_i: entity work.raddsp_wide_mul
     generic map (
+      VENDOR => VENDOR,
       DEVICE_FAMILY => DEVICE_FAMILY,
       A_WIDTH => G_FFT_OUTPUT_WIDTH,
       B_WIDTH => G_FFT_OUTPUT_WIDTH,
@@ -952,8 +959,10 @@ begin
       p_o => prod_mul_p
     );
 
-  in_fifo_i: xpm_fifo_sync
+  in_fifo_i: radhdl_fifo
     generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
       FIFO_MEMORY_TYPE => "block",
       FIFO_WRITE_DEPTH => G_FIFO_DEPTH,
       WRITE_DATA_WIDTH => C_FIFO_WIDTH,
@@ -974,8 +983,10 @@ begin
       rst => fifo_rst, sleep => '0', wr_clk => clk, wr_en => in_fifo_wr_en
     );
 
-  out_fifo_i: xpm_fifo_sync
+  out_fifo_i: radhdl_fifo
     generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
       FIFO_MEMORY_TYPE => "block",
       FIFO_WRITE_DEPTH => G_FIFO_DEPTH,
       WRITE_DATA_WIDTH => C_FIFO_WIDTH,
@@ -996,8 +1007,10 @@ begin
       rst => fifo_rst, sleep => '0', wr_clk => clk, wr_en => out_fifo_wr_en
     );
 
-  fft_input_fifo_i: xpm_fifo_sync
+  fft_input_fifo_i: radhdl_fifo
     generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
       FIFO_MEMORY_TYPE => G_XCORR_MEMORY_STYLE,
       FIFO_WRITE_DEPTH => G_XCORR_FRAME_DEPTH,
       WRITE_DATA_WIDTH => C_FFT_INPUT_BITS,
@@ -1018,8 +1031,10 @@ begin
       rst => fifo_rst, sleep => '0', wr_clk => clk, wr_en => fft_in_fifo_wr_en
     );
 
-  xcorr_a_fifo_i: xpm_fifo_sync
+  xcorr_a_fifo_i: radhdl_fifo
     generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
       FIFO_MEMORY_TYPE => G_XCORR_MEMORY_STYLE,
       FIFO_WRITE_DEPTH => G_XCORR_FRAME_DEPTH,
       WRITE_DATA_WIDTH => C_FFT_OUTPUT_BITS,
@@ -1040,8 +1055,10 @@ begin
       rst => fifo_rst, sleep => '0', wr_clk => clk, wr_en => xcorr_a_fifo_wr_en
     );
 
-  xcorr_product_fifo_i: xpm_fifo_sync
+  xcorr_product_fifo_i: radhdl_fifo
     generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
       FIFO_MEMORY_TYPE => G_XCORR_MEMORY_STYLE,
       FIFO_WRITE_DEPTH => G_XCORR_FRAME_DEPTH,
       WRITE_DATA_WIDTH => C_FFT_INPUT_BITS,

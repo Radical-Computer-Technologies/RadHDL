@@ -71,6 +71,22 @@ INTERFACE_GROUPS: dict[str, tuple[str, ...]] = {
     "interfaces_axi": ("axi", "axis"),
 }
 
+RADCDC_SOURCES = [
+    "common/hdl/src/radhdl_cdc.vhd",
+]
+
+RADPRIMITIVE_SOURCES = [
+    *RADCDC_SOURCES,
+    "common/hdl/src/radhdl_ram.vhd",
+    "common/hdl/src/radhdl_fifo.vhd",
+    "common/hdl/src/radhdl_fifo_sync.vhd",
+    "common/hdl/src/radhdl_fifo_async.vhd",
+    "common/hdl/src/radhdl_sample_ram.vhd",
+    "dsp/hdl/raddsp/src/raddsp_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_wide_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_square_seq.vhd",
+]
+
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
@@ -214,11 +230,15 @@ def main() -> None:
     dsp_entities = collect_unique(DSP_RADDSP_RAW)
     interface_entities = collect_unique(INTERFACES_RADIF)
     debug_entities = collect_unique(DEBUG_RADILA)
+    cdc_entities = collect_unique(RADCDC_SOURCES)
+    primitive_entities = collect_unique(RADPRIMITIVE_SOURCES)
 
     package_entities: dict[str, list[EntityDecl]] = {
         "dsp": dsp_entities,
         "interfaces": interface_entities,
         "debug": debug_entities,
+        "RadCDC": cdc_entities,
+        "RadPrimitive": primitive_entities,
     }
     for entity in dsp_entities:
         package_entities.setdefault(first_matching_group(entity.name, DSP_GROUPS, "dsp_transform"), []).append(entity)
@@ -228,14 +248,14 @@ def main() -> None:
     interface_uses = ("use work.radif_pkg.all;",)
     for package_name in sorted(package_entities):
         uses = interface_uses if package_name.startswith("interfaces") else ()
-        write_file(OUT_DIR / f"{package_name}.vhd", package_text(package_name, package_entities[package_name], uses))
+        write_file(OUT_DIR / f"{package_name.lower()}.vhd", package_text(package_name, package_entities[package_name], uses))
 
     write_file(OUT_DIR / "dsp_context.vhd", context_text("dsp_context", ("dsp",)))
     write_file(OUT_DIR / "interfaces_context.vhd", context_text("interfaces_context", ("interfaces",)))
     write_file(OUT_DIR / "debug_context.vhd", context_text("debug_context", ("debug",)))
     write_file(
         OUT_DIR / "radhdl_context.vhd",
-        context_text("radhdl_context", ("dsp", "interfaces", "debug")),
+        context_text("radhdl_context", ("dsp", "interfaces", "debug", "RadCDC", "RadPrimitive")),
     )
 
 

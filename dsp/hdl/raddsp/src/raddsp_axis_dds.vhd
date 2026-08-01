@@ -4,9 +4,6 @@ use ieee.numeric_std.all;
 
 use work.raddsp_axis_pkg.all;
 
-library xpm;
-use xpm.vcomponents.all;
-
 -- AXI-stream numerically controlled oscillator and direct digital synthesis source.
 -- Generates phase-continuous sine/cosine or waveform samples from programmable tuning words for DSP stimulus and mixing chains.
 entity raddsp_axis_dds is
@@ -62,10 +59,9 @@ end entity;
 
 architecture rtl of raddsp_axis_dds is
   constant C_LUT_DEPTH : positive := 2 ** LUT_ADDR_WIDTH;
-  constant C_MEM_BITS  : positive := C_LUT_DEPTH * DATA_WIDTH;
-
-  subtype sample_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
-  type sample_ram_t is array (0 to C_LUT_DEPTH - 1) of sample_t;
+  constant C_IS_XILINX : boolean := VENDOR = "xilinx" or VENDOR = "XILINX";
+  constant C_IS_LATTICE : boolean := VENDOR = "lattice" or VENDOR = "LATTICE" or VENDOR = "ecp5" or VENDOR = "ECP5";
+  constant C_USE_MEM_INIT : integer := 1 when C_IS_XILINX else 0;
 
   signal phase_r       : unsigned(PHASE_WIDTH - 1 downto 0) := (others => '0');
   signal rd_addr_r     : std_logic_vector(LUT_ADDR_WIDTH - 1 downto 0) := (others => '0');
@@ -77,7 +73,20 @@ architecture rtl of raddsp_axis_dds is
   signal frame_count_r : natural range 0 to integer'high := 0;
   signal ready_i       : std_logic;
 
-  signal ram_r : sample_ram_t := (others => (others => '0'));
+  component radhdl_ram is
+    generic (
+      VENDOR : string := "xilinx"; DEVICE_FAMILY : string := "7series"; MODE : string := "tdp"; MEMORY_KIND : string := "bram";
+      DATA_WIDTH : positive := 18; ADDR_WIDTH : positive := 10; DEPTH : positive := 1024;
+      CLOCKING_MODE : string := "common_clock";
+      MEMORY_INIT_FILE : string := "none"; USE_MEM_INIT : integer := 0
+    );
+    port (
+      clka : in std_logic; rsta : in std_logic; a_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      a_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); a_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); a_we : in std_logic;
+      clkb : in std_logic; rstb : in std_logic; b_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      b_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); b_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); b_we : in std_logic
+    );
+  end component;
 begin
   assert PHASE_WIDTH >= LUT_ADDR_WIDTH
     report "PHASE_WIDTH must be greater than or equal to LUT_ADDR_WIDTH"
@@ -90,82 +99,40 @@ begin
   phase_o <= std_logic_vector(phase_r);
   lut_addr_o <= rd_addr_r;
 
-  gen_xilinx_xpm : if VENDOR = "xilinx" or VENDOR = "XILINX" generate
+  assert C_IS_XILINX or C_IS_LATTICE
+    report "raddsp_axis_dds unsupported VENDOR; expected xilinx or lattice/ecp5"
+    severity failure;
+
+  gen_lut_ram : if C_IS_XILINX or C_IS_LATTICE generate
     signal unused_dout_b : std_logic_vector(DATA_WIDTH - 1 downto 0);
   begin
-    lut_i: xpm_memory_tdpram
+    lut_i : radhdl_ram
       generic map (
-        ADDR_WIDTH_A => LUT_ADDR_WIDTH,
-        ADDR_WIDTH_B => LUT_ADDR_WIDTH,
-        AUTO_SLEEP_TIME => 0,
-        BYTE_WRITE_WIDTH_A => DATA_WIDTH,
-        BYTE_WRITE_WIDTH_B => DATA_WIDTH,
-        CASCADE_HEIGHT => 0,
+        VENDOR => VENDOR,
+        DEVICE_FAMILY => DEVICE_FAMILY,
+        MODE => "sdp",
+        MEMORY_KIND => "bram",
+        DATA_WIDTH => DATA_WIDTH,
+        ADDR_WIDTH => LUT_ADDR_WIDTH,
+        DEPTH => C_LUT_DEPTH,
         CLOCKING_MODE => "common_clock",
-        ECC_MODE => "no_ecc",
         MEMORY_INIT_FILE => MEM_INIT_FILE,
-        MEMORY_INIT_PARAM => "0",
-        MEMORY_OPTIMIZATION => "true",
-        MEMORY_PRIMITIVE => "block",
-        MEMORY_SIZE => C_MEM_BITS,
-        MESSAGE_CONTROL => 0,
-        READ_DATA_WIDTH_A => DATA_WIDTH,
-        READ_DATA_WIDTH_B => DATA_WIDTH,
-        READ_LATENCY_A => 1,
-        READ_LATENCY_B => 1,
-        READ_RESET_VALUE_A => "0",
-        READ_RESET_VALUE_B => "0",
-        RST_MODE_A => "SYNC",
-        RST_MODE_B => "SYNC",
-        SIM_ASSERT_CHK => 0,
-        USE_EMBEDDED_CONSTRAINT => 0,
-        USE_MEM_INIT => 1,
-        WAKEUP_TIME => "disable_sleep",
-        WRITE_DATA_WIDTH_A => DATA_WIDTH,
-        WRITE_DATA_WIDTH_B => DATA_WIDTH,
-        WRITE_MODE_A => "read_first",
-        WRITE_MODE_B => "read_first"
+        USE_MEM_INIT => C_USE_MEM_INIT
       )
       port map (
-        sleep => '0',
         clka => clk,
         rsta => rst,
-        ena => '1',
-        regcea => '1',
-        wea => (others => '0'),
-        addra => rd_addr_r,
-        dina => (others => '0'),
-        injectsbiterra => '0',
-        injectdbiterra => '0',
-        douta => lut_dout,
-        sbiterra => open,
-        dbiterra => open,
+        a_addr => rd_addr_r,
+        a_din => (others => '0'),
+        a_dout => lut_dout,
+        a_we => '0',
         clkb => clk,
         rstb => rst,
-        enb => '1',
-        regceb => '1',
-        web(0) => wav_wr_en_i,
-        addrb => wav_wr_addr_i,
-        dinb => wav_wr_data_i,
-        injectsbiterrb => '0',
-        injectdbiterrb => '0',
-        doutb => unused_dout_b,
-        sbiterrb => open,
-        dbiterrb => open
+        b_addr => wav_wr_addr_i,
+        b_din => wav_wr_data_i,
+        b_dout => unused_dout_b,
+        b_we => wav_wr_en_i
       );
-  end generate;
-
-  gen_generic_ram : if VENDOR /= "xilinx" and VENDOR /= "XILINX" generate
-  begin
-    process(clk)
-    begin
-      if rising_edge(clk) then
-        lut_dout <= ram_r(to_integer(unsigned(rd_addr_r)));
-        if wav_wr_en_i = '1' then
-          ram_r(to_integer(unsigned(wav_wr_addr_i))) <= wav_wr_data_i;
-        end if;
-      end if;
-    end process;
   end generate;
 
   process(clk)

@@ -228,6 +228,8 @@ package dsp_detection is
   -- Component declaration sourced from dsp/hdl/raddsp/src/zc_cross_correlator.vhd.
   component zc_cross_correlator is
     generic (
+      -- Selects the vendor-specific implementation path.
+      VENDOR          : string := "xilinx";
       -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.
       DEVICE_FAMILY : string := "7series";
       -- Sets the bit width for G SAMPLE WIDTH values carried by this module.
@@ -268,6 +270,8 @@ package dsp_detection is
   -- Component declaration sourced from dsp/hdl/raddsp/src/zc_peak_detector.vhd.
   component zc_peak_detector is
     generic (
+      -- Selects the vendor-specific implementation path.
+      VENDOR          : string := "xilinx";
       -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.
       DEVICE_FAMILY   : string := "7series";
       -- Sets the bit width for G SAMPLE WIDTH values carried by this module.
@@ -312,6 +316,8 @@ package dsp_detection is
   -- Component declaration sourced from dsp/hdl/raddsp/src/zc_chirp_frame_detector.vhd.
   component zc_chirp_frame_detector is
     generic (
+      -- Selects the vendor-specific implementation path.
+      VENDOR              : string := "xilinx";
       -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.
       DEVICE_FAMILY       : string := "7series";
       -- Sets the bit width for G SAMPLE WIDTH values carried by this module.

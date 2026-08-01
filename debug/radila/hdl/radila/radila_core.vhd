@@ -2,9 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library xpm;
-use xpm.vcomponents.all;
-
 -- Integrated logic analyzer capture core for RadHDL debug builds.
 -- Samples an application bus in the sample clock domain, captures event metadata, and exposes captured data through an AXI-facing read path.
 entity RadILA is
@@ -107,91 +104,64 @@ architecture rtl of RadILA is
     return resize(v, ADDR_WIDTH + 1);
   end function;
 
-  type ram_t is array (0 to DEPTH - 1) of std_logic_vector(SAMPLE_WIDTH - 1 downto 0);
-  signal generic_ram : ram_t := (others => (others => '0'));
-  attribute ram_style : string;
-  attribute ram_style of generic_ram : signal is "block";
+  component radhdl_ram is
+    generic (
+      VENDOR           : string   := "xilinx";
+      DEVICE_FAMILY    : string   := "7series";
+      MODE             : string   := "tdp";
+      MEMORY_KIND      : string   := "bram";
+      DATA_WIDTH       : positive := 32;
+      ADDR_WIDTH       : positive := 10;
+      DEPTH            : positive := 1024;
+      CLOCKING_MODE    : string   := "independent_clock";
+      MEMORY_INIT_FILE : string   := "none";
+      USE_MEM_INIT     : integer  := 0
+    );
+    port (
+      clka   : in  std_logic;
+      rsta   : in  std_logic;
+      a_addr : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      a_din  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+      a_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+      a_we   : in  std_logic;
+      clkb   : in  std_logic;
+      rstb   : in  std_logic;
+      b_addr : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      b_din  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+      b_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+      b_we   : in  std_logic
+    );
+  end component;
 begin
   trigger_match <= '1' when ((event_i and trig_mask) = (trig_value and trig_mask)) else '0';
   cmd_ack_toggle_o <= cmd_ack;
   rd_addr <= std_logic_vector(rd_index_i);
 
-  gen_xilinx_ram : if VENDOR_TAG = "XILINX" generate
-  begin
-    i_capture_ram : xpm_memory_tdpram
-      generic map (
-        MEMORY_SIZE        => DEPTH * SAMPLE_WIDTH,
-        MEMORY_PRIMITIVE   => "block",
-        CLOCKING_MODE      => "independent_clock",
-        ECC_MODE           => "no_ecc",
-        MEMORY_INIT_FILE   => "none",
-        USE_MEM_INIT       => 0,
-        WAKEUP_TIME        => "disable_sleep",
-        MESSAGE_CONTROL    => 0,
-        WRITE_DATA_WIDTH_A => SAMPLE_WIDTH,
-        READ_DATA_WIDTH_A  => SAMPLE_WIDTH,
-        BYTE_WRITE_WIDTH_A => SAMPLE_WIDTH,
-        ADDR_WIDTH_A       => ADDR_WIDTH,
-        READ_RESET_VALUE_A => "0",
-        READ_LATENCY_A     => 1,
-        WRITE_MODE_A       => "no_change",
-        WRITE_DATA_WIDTH_B => SAMPLE_WIDTH,
-        READ_DATA_WIDTH_B  => SAMPLE_WIDTH,
-        BYTE_WRITE_WIDTH_B => SAMPLE_WIDTH,
-        ADDR_WIDTH_B       => ADDR_WIDTH,
-        READ_RESET_VALUE_B => "0",
-        READ_LATENCY_B     => 1,
-        WRITE_MODE_B       => "read_first"
-      )
-      port map (
-        sleep          => '0',
-        clka           => sample_clk,
-        rsta           => not sample_rstn,
-        ena            => '1',
-        regcea         => '1',
-        wea            => ram_we,
-        addra          => wr_addr,
-        dina           => sample_i,
-        injectsbiterra => '0',
-        injectdbiterra => '0',
-        douta          => unused_douta,
-        sbiterra       => open,
-        dbiterra       => open,
-        clkb           => axi_clk,
-        rstb           => not axi_rstn,
-        enb            => '1',
-        regceb         => '1',
-        web            => ram_web_zero,
-        addrb          => rd_addr,
-        dinb           => ram_dinb_zero,
-        injectsbiterrb => '0',
-        injectdbiterrb => '0',
-        doutb          => rd_data_o,
-        sbiterrb       => open,
-        dbiterrb       => open
-      );
-  end generate;
-
-  gen_generic_ram : if VENDOR_TAG /= "XILINX" generate
-  begin
-    unused_douta <= (others => '0');
-
-    process(sample_clk)
-    begin
-      if rising_edge(sample_clk) then
-        if ram_we(0) = '1' then
-          generic_ram(to_integer(unsigned(wr_addr))) <= sample_i;
-        end if;
-      end if;
-    end process;
-
-    process(axi_clk)
-    begin
-      if rising_edge(axi_clk) then
-        rd_data_o <= generic_ram(to_integer(unsigned(rd_addr)));
-      end if;
-    end process;
-  end generate;
+  i_capture_ram : radhdl_ram
+    generic map (
+      VENDOR => VENDOR_TAG,
+      DEVICE_FAMILY => PRODUCT_SERIES_TAG,
+      MODE => "sdp",
+      MEMORY_KIND => "bram",
+      DATA_WIDTH => SAMPLE_WIDTH,
+      ADDR_WIDTH => ADDR_WIDTH,
+      DEPTH => DEPTH,
+      CLOCKING_MODE => "independent_clock"
+    )
+    port map (
+      clka => sample_clk,
+      rsta => not sample_rstn,
+      a_addr => wr_addr,
+      a_din => sample_i,
+      a_dout => unused_douta,
+      a_we => ram_we(0),
+      clkb => axi_clk,
+      rstb => not axi_rstn,
+      b_addr => rd_addr,
+      b_din => ram_dinb_zero,
+      b_dout => rd_data_o,
+      b_we => ram_web_zero(0)
+    );
 
   process(sample_clk)
     variable next_ptr : unsigned(ADDR_WIDTH - 1 downto 0);

@@ -2,9 +2,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-library xpm;
-use xpm.vcomponents.all;
-
 -- AXI-stream fingerprint matcher for spectral feature vectors.
 -- Compares incoming fingerprint data against reference features and emits match scores for recognition pipelines.
 entity raddsp_axis_fingerprint_matcher is
@@ -113,6 +110,8 @@ architecture rtl of raddsp_axis_fingerprint_matcher is
 
   constant C_TABLE_DEPTH : positive := 2 ** TABLE_ADDR_WIDTH;
   constant C_ENTRY_WIDTH : positive := 1 + META_WIDTH + HASH_WIDTH;
+  constant C_IS_XILINX : boolean := VENDOR = "xilinx" or VENDOR = "XILINX";
+  constant C_IS_LATTICE : boolean := VENDOR = "lattice" or VENDOR = "LATTICE" or VENDOR = "ecp5" or VENDOR = "ECP5";
 
   signal enable_r        : std_logic := '0';
   signal irq_enable_r    : std_logic := '0';
@@ -146,6 +145,21 @@ architecture rtl of raddsp_axis_fingerprint_matcher is
   signal arready_r       : std_logic := '0';
   signal rvalid_r        : std_logic := '0';
   signal rdata_r         : std_logic_vector(AXI_DATA_WIDTH - 1 downto 0) := (others => '0');
+
+  component radhdl_ram is
+    generic (
+      VENDOR : string := "xilinx"; DEVICE_FAMILY : string := "7series"; MODE : string := "tdp"; MEMORY_KIND : string := "bram";
+      DATA_WIDTH : positive := 18; ADDR_WIDTH : positive := 10; DEPTH : positive := 1024;
+      CLOCKING_MODE : string := "common_clock";
+      MEMORY_INIT_FILE : string := "none"; USE_MEM_INIT : integer := 0
+    );
+    port (
+      clka : in std_logic; rsta : in std_logic; a_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      a_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); a_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); a_we : in std_logic;
+      clkb : in std_logic; rstb : in std_logic; b_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      b_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); b_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); b_we : in std_logic
+    );
+  end component;
 
   function axi_word_addr(addr : std_logic_vector) return natural is
     variable a : unsigned(addr'length - 1 downto 0) := unsigned(addr);
@@ -203,69 +217,34 @@ begin
   s_axi_rresp <= "00";
   s_axi_rvalid <= rvalid_r;
 
-  gen_xilinx_mem : if VENDOR = "xilinx" or VENDOR = "XILINX" generate
-    signal wea_v : std_logic_vector(0 downto 0);
+  gen_table_mem : if C_IS_XILINX or C_IS_LATTICE generate
+    signal unused_dout_a : std_logic_vector(C_ENTRY_WIDTH - 1 downto 0);
   begin
-    wea_v(0) <= mem_wr_en;
-    mem_i: xpm_memory_sdpram
+    mem_i : radhdl_ram
       generic map (
-        MEMORY_SIZE => C_ENTRY_WIDTH * C_TABLE_DEPTH,
-        MEMORY_PRIMITIVE => MEMORY_STYLE,
-        CLOCKING_MODE => "common_clock",
-        ECC_MODE => "no_ecc",
-        MEMORY_INIT_FILE => "none",
-        MEMORY_INIT_PARAM => "0",
-        USE_MEM_INIT => 1,
-        WAKEUP_TIME => "disable_sleep",
-        MESSAGE_CONTROL => 0,
-        MEMORY_OPTIMIZATION => "true",
-        CASCADE_HEIGHT => 0,
-        WRITE_DATA_WIDTH_A => C_ENTRY_WIDTH,
-        BYTE_WRITE_WIDTH_A => C_ENTRY_WIDTH,
-        ADDR_WIDTH_A => TABLE_ADDR_WIDTH,
-        READ_DATA_WIDTH_B => C_ENTRY_WIDTH,
-        ADDR_WIDTH_B => TABLE_ADDR_WIDTH,
-        READ_RESET_VALUE_B => "0",
-        READ_LATENCY_B => 1,
-        WRITE_MODE_B => "read_first",
-        RST_MODE_A => "SYNC",
-        RST_MODE_B => "SYNC"
+        VENDOR => VENDOR,
+        DEVICE_FAMILY => DEVICE_FAMILY,
+        MODE => "sdp",
+        MEMORY_KIND => MEMORY_STYLE,
+        DATA_WIDTH => C_ENTRY_WIDTH,
+        ADDR_WIDTH => TABLE_ADDR_WIDTH,
+        DEPTH => C_TABLE_DEPTH,
+        CLOCKING_MODE => "common_clock"
       )
       port map (
-        sleep => '0',
         clka => clk,
-        ena => '1',
-        wea => wea_v,
-        addra => mem_wr_addr,
-        dina => mem_wr_data,
-        injectsbiterra => '0',
-        injectdbiterra => '0',
+        rsta => '0',
+        a_addr => mem_wr_addr,
+        a_din => mem_wr_data,
+        a_dout => unused_dout_a,
+        a_we => mem_wr_en,
         clkb => clk,
         rstb => '0',
-        enb => '1',
-        regceb => '1',
-        addrb => mem_rd_addr,
-        doutb => mem_rd_data,
-        sbiterrb => open,
-        dbiterrb => open
+        b_addr => mem_rd_addr,
+        b_din => (others => '0'),
+        b_dout => mem_rd_data,
+        b_we => '0'
       );
-  end generate;
-
-  gen_generic_mem : if VENDOR /= "xilinx" and VENDOR /= "XILINX" generate
-    type table_t is array (0 to C_TABLE_DEPTH - 1) of std_logic_vector(C_ENTRY_WIDTH - 1 downto 0);
-    signal table_r : table_t := (others => (others => '0'));
-    signal rd_data_r : std_logic_vector(C_ENTRY_WIDTH - 1 downto 0) := (others => '0');
-  begin
-    mem_rd_data <= rd_data_r;
-    process(clk)
-    begin
-      if rising_edge(clk) then
-        if mem_wr_en = '1' then
-          table_r(to_integer(unsigned(mem_wr_addr))) <= mem_wr_data;
-        end if;
-        rd_data_r <= table_r(to_integer(unsigned(mem_rd_addr)));
-      end if;
-    end process;
   end generate;
 
   process(clk)

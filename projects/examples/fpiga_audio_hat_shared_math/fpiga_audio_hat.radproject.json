@@ -1,0 +1,220 @@
+{
+  "radbuild_schema": "2.0",
+  "radbuild_version": "0.2.1",
+  "project_name": "fpiga_audio_hat_shared_math",
+  "description": "RadHDL-native Gowin GW5A FPiGA Audio Hat experiment sharing multiplier resources across global pan, EQ, and output gain.",
+  "systems": [
+    {
+      "id": "radhdl_fpiga_audio_shared_gowin",
+      "type": "fpga.gowin",
+      "top": "radhdl_fpiga_audio_top",
+      "vendor": "gowin",
+      "part": "GW5A-LV25MG121NC1/I0",
+      "device_version": "A",
+      "toolchain": {
+        "tested_install": "/home/jvincent/gowin",
+        "tested_version": "Gowin EDA V1.9.11.03 Education",
+        "entrypoint": "gw_sh"
+      },
+      "source_root": "/media/jvincent/Kingspec512/repos/RadHDL",
+      "sources": [
+        "interfaces/hdl/radif/src/radif_pkg.vhd",
+        "interfaces/hdl/radif/src/radif_i2c_slave_to_reg.vhd",
+        "interfaces/hdl/radif/src/radif_reg_bank.vhd",
+        "interfaces/hdl/radif/src/radif_reg_interconnect.vhd",
+        "interfaces/hdl/radif/src/radif_i2s_axis.vhd",
+        "dsp/hdl/raddsp/src/raddsp_axis_pkg.vhd",
+        "dsp/hdl/raddsp/src/raddsp_gowin_multalu27x18_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_gowin_multalu27x32_mul.vhd",
+        "dsp/hdl/raddsp/src/raddsp_gowin_dpb16.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_quad_wavetable_oscillator.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_quad_lfo_wavetable.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_poly_synth.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_quad_osc_pan_mixer.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_stereo_balance_tdm.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_stereo_biquad_eq_tdm.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_stereo_shared_pg_eq_tdm.vhd",
+        "dsp/hdl/raddsp/src/raddsp_audio_stereo_gain.vhd",
+        "debug/radila/hdl/radila/radila_gowin_dpb_ram.vhd",
+        "debug/radila/hdl/radila/radila_core.vhd",
+        "debug/radila/hdl/radila/raddebughub.vhd",
+        "projects/examples/fpiga_audio_hat_shared_math/src/radhdl_fpiga_audio_top.vhd"
+      ],
+      "constraints_root": "/media/jvincent/Kingspec512/repos/RadHDL/projects/examples/fpiga_audio_hat_shared_math/gowin",
+      "constraints": [
+        "fpiga_audio_hat_pi_i2s.cst",
+        "fpiga_audio_hat_timing.sdc"
+      ],
+      "gowin_options": {
+        "use_sspi_as_gpio": true,
+        "use_cpu_as_gpio": true,
+        "cst_warn_to_error": true,
+        "vhdl_std": "vhd2008",
+        "pipe": true,
+        "retiming": true,
+        "maxfan": 64,
+        "place_option": 2,
+        "route_option": 1,
+        "route_maxfan": 16
+      },
+      "artifacts": {
+        "bitstream": "projects/examples/fpiga_audio_hat_shared_math/build/gowin/radhdl_fpiga_audio_shared/impl/pnr/radhdl_fpiga_audio_shared.fs",
+        "binary": "projects/examples/fpiga_audio_hat_shared_math/build/gowin/radhdl_fpiga_audio_shared/impl/pnr/radhdl_fpiga_audio_shared.bin",
+        "pnr_report": "projects/examples/fpiga_audio_hat_shared_math/build/gowin/radhdl_fpiga_audio_shared/impl/pnr/radhdl_fpiga_audio_shared.rpt.txt",
+        "timing_report": "projects/examples/fpiga_audio_hat_shared_math/build/gowin/radhdl_fpiga_audio_shared/impl/pnr/radhdl_fpiga_audio_shared.tr.html",
+        "synthesis_netlist": "projects/examples/fpiga_audio_hat_shared_math/build/gowin/radhdl_fpiga_audio_shared/impl/gwsynthesis/radhdl_fpiga_audio_shared.vg"
+      },
+      "validated": {
+        "date": "2026-07-09",
+        "status": "bitstream_generated",
+        "tool_version": "Gowin EDA V1.9.11.03 Education",
+        "created_time": "Thu Jul 9 15:42:48 2026",
+        "checks": [
+          "RadHDL-only source set synthesized and placed/routed",
+          "Generated non-empty .fs and .bin programming artifacts",
+          "Main I2C control uses radif_i2c_slave_to_reg, radif_reg_interconnect, two small radif_reg_bank windows, and a direct poly synth config target",
+          "Debug I2C bridge at 0x42 drives RadDebugHub through the RadIF register interface",
+          "DSP_MODE 0x02 selects a 16-voice RadDSP polyphonic synth with per-voice frequency, gate/enable, waveform volume, and ADSR registers",
+          "DSP_MODE 0x01 uses a loadable four-page 16-bit half-period wavetable with sign reconstruction and linear interpolation",
+          "Four assignable LFOs use a two-DPB 512-sample half-period table with linear interpolation, per-LFO frequency, per-LFO depth, and target routing",
+          "Selected stereo output passes through a shared pan, five-section global stereo biquad EQ, and output gain scheduler using four Gowin MULTALU27X18 blocks total for those final output stages",
+          "Shared output EQ coefficients use a banked two-DPB active/shadow coefficient store; software writes the inactive bank and EQ_CONTROL[8] flips the active bank when the scheduler reaches IDLE",
+          "Shared output EQ coefficient address decode uses explicit case mapping to avoid inferred Gowin MULT12X12 address multiplication",
+          "DSP_MODE 0x01 uses a TDM shared-multiplier oscillator gain path and a TDM shared-multiplier pan mixer",
+          "Standalone global balance/pan, stereo EQ, and output gain stages are replaced by one shared deterministic output math scheduler",
+          "Polyphonic synth host configuration registers keep their initialized values across datapath reset with RESET_CONFIG_REGS=false to remove reset/write-enable fanout from the critical path",
+          "Polyphonic synth per-voice host configuration uses an explicit two-DPB 64x32 config store with I2C writes on the write port and scheduler reads on the read port",
+          "Polyphonic synth waveform evaluation uses separate interpolation and waveform-volume MULTALU27X18 blocks with a fixed tap schedule that overlaps table reads, interpolation products, volume products, and accumulation",
+          "Polyphonic synth interpolation launch uses a registered B-sample tap so the wavetable DPB output is not on the subtract-to-multiplier input path",
+          "Polyphonic synth phase and ADSR envelope updates are split into separate scheduler states, including a pipelined ADSR select/apply/commit sequence",
+          "LFO modulation accumulation and final clamp/update are split into separate clocks to keep clamp logic off the summation-index path",
+          "Main control register banks use PIPELINED_READ=true so I2C register reads wait one extra fabric clock instead of forcing the bridge read address through a large register mux in one cycle",
+          "Raspberry Pi I2S send/receive runs in the PLL audio MCLK domain at a 96 kHz stereo frame rate using 32-bit slots with a low-byte lane marker",
+          "Raspberry Pi playback markers 0xA0 and 0xA1 are decoded to classify lane 0 and lane 1, with alternating-lane fallback when a marker is missing",
+          "Raspberry Pi lane 0 can feed the codec DAC path through DSP_CONTROL[3], while the FPGA synth output is returned to the Raspberry Pi on lane 0 with marker 0xA0 and lane 1 is returned as zero with marker 0xA1",
+          "Project-local CST and SDC constrain every board audio pin, enable I2S_DOUT_PI on H1, and explicitly mark AUDIO_MCLK and FABRIC_100M asynchronous",
+          "Raspberry Pi, codec ADC, and codec DAC I2S cores use locally staged reset release signals to keep their reset fanout off the global board reset route",
+          "LFO frequency and pan modulation outputs are registered before feeding oscillator phase increments and the shared output scheduler",
+          "Gowin timing options set pipe, retiming, maxfan, place_option 2, route_option 1, and route_maxfan 16",
+          "ADC I2S pins I2S_BCK, I2S_LRCK_ADC, and I2S_SDA_ADC were constrained and placed",
+          "No legacy FPiGA_I2C, FPiGA_I2S, FPiGA_Audio_DSP, FPiGA_WaveTable, I2CSLAVE, WaveTableBram, AUD_DSP_MULT, or fpiga_clks modules are instantiated"
+        ],
+        "artifacts": {
+          "bitstream_bytes": 6538355,
+          "binary_bytes": 815474
+        },
+        "timing": {
+          "audio_mclk_intended_mhz": 12.288786,
+          "audio_mclk_gowin_generated_clock_mhz": 12.346,
+          "audio_mclk_actual_fmax_mhz": 177.079,
+          "sysclk_constraint_mhz": 100.0,
+          "actual_fmax_mhz": 118.588,
+          "worst_setup_slack_ns": 1.567,
+          "worst_setup_path": "u_shared_pg_eq/section_idx_1_s1/Q to u_shared_pg_eq/section_in_12_s1/D",
+          "setup_tns": 0.0,
+          "hold_tns": 0.0,
+          "clock_warning": "Gowin TA1123 reports AUDIO_MCLK does not match u_pll/CLKOUT0 because its generated-clock model reports ODIV0 as 81.000 ns / 12.346 MHz while the explicit SDC uses the PLLA fractional divider ODIV0_SEL=81, ODIV0_FRAC_SEL=3 as 81.375 ns / 12.288786 MHz."
+        },
+        "resource_usage": {
+          "logic": {"used": 6628, "available": 23040, "utilization_percent": 29},
+          "lut": 5563,
+          "alu": 1065,
+          "register": {"used": 6715, "available": 23280, "utilization_percent": 29},
+          "cls": {"used": 6295, "available": 11520, "utilization_percent": 55},
+          "io_port": {"used": 18, "available": 86, "utilization_percent": 21},
+          "iologic": {"used": 1, "available": 80, "utilization_percent": 2},
+          "bsram": {"used": 12, "available": 56, "utilization_percent": 22},
+          "dpb": 12,
+          "dsp": {"used": 9, "available": 28, "utilization_percent": 33},
+          "multalu27x18": 9,
+          "mult12x12": 0,
+          "plla": {"used": 1, "available": 6, "utilization_percent": 17}
+        },
+        "placed_pins": {
+          "I2S_BCK": "J1",
+          "I2S_LRCK_ADC": "L1",
+          "I2S_SDA_ADC": "L2",
+          "I2S_BCK_RPI": "G4",
+          "I2S_LRCK_RPI": "H2",
+          "I2S_SDA_IN_RPI": "H4",
+          "I2S_DOUT_PI": "H1",
+          "I2S_SDA_DAC": "K2",
+          "MCLKXCO_OUT": "L4",
+          "MUTEEN": "L9"
+        }
+      }
+    }
+  ],
+  "software": {
+    "linux_i2c_device": "/dev/i2c-1",
+    "fpga_i2c_address": "0x12",
+    "codec_i2c_address": "0x1b",
+    "codec": "SSM2603",
+    "sample_rate": 48000,
+    "i2s_word_bits": 32,
+    "i2s_audio_bits": 24,
+    "i2s_lane_marker_bits": 8
+  },
+  "audio_paths": {
+    "pi_playback": "Raspberry Pi I2S runs in the AUDIO_MCLK domain at a 96 kHz stereo frame rate using 32-bit slots. The upper 24 bits carry audio and the low byte carries 0xA0/0xA1 lane markers. Lane 0 Pi-to-FPGA playback can feed the codec DAC path; FPGA synth output is returned to the Raspberry Pi on lane 0 with marker 0xA0 and lane 1 is returned as zero with marker 0xA1.",
+    "codec_adc": "Codec ADC I2S data is captured by a second RADIF I2S instance and can be selected or mixed into the DAC path through DSP_CONTROL.",
+    "synth": "DSP_MODE 0x01 selects the four-oscillator loadable wavetable synth path with packed per-oscillator pan. DSP_MODE 0x02 selects the 16-voice register-controlled RadDSP polyphonic synth. Both synth paths use 16-bit half-period wavetable pages with sign reconstruction, linear interpolation, and 16-bit internal waveform amplitude.",
+    "lfo": "Four assignable LFOs use a shared two-DPB wavetable with 512-sample positive half-period pages. LFO_CONTROL selects enable, waveform page, and target routing; LFO_FREQ0..3 set rate and LFO_DEPTH0..3 set modulation depth. Target 01 sums into all four oscillator phase increments; target 10 modulates global pan.",
+    "eq": "Selected stereo output passes through an optional five-section global biquad EQ inside the shared pan/EQ/gain scheduler. The Pi computes Q3.28 b0, b1, b2, a1, and a2 coefficients with RADLib/RADBard math, writes them through EQ_COEFF_ADDR/EQ_COEFF_DATA, and commits them atomically with EQ_CONTROL[8]."
+  },
+  "register_banks": [
+    {
+      "id": "fpiga_audio_i2c_regs_0x12",
+      "address_width": 16,
+      "data_width": 32,
+      "endianness": "little",
+      "registers": [
+        {"offset": "0x0000", "name": "CONTROL", "access": "rw", "description": "Bit 0 holds datapath reset when set, bit 1 drives MUTEEN, and bit 8 enables DAC stream output."},
+        {"offset": "0x0004", "name": "DSP_CONTROL", "access": "rw", "description": "Bits [7:0] select DSP mode: 0x00 Pi playback, 0x01 four-oscillator synth, 0x02 polyphonic synth. Bits [15:8] are routing flags: bit 1 selects ADC monitor, bit 2 mixes ADC with Pi playback, and bit 3 selects Pi lane-0 playback as DAC source during synth modes. Bits [23:16] hold packed waveform selectors for the four-oscillator synth."},
+        {"offset": "0x0008", "name": "FREQ0", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 0 phase increment."},
+        {"offset": "0x000c", "name": "FREQ1", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 1 phase increment."},
+        {"offset": "0x0010", "name": "FREQ2", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 2 phase increment."},
+        {"offset": "0x0014", "name": "FREQ3", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 3 phase increment."},
+        {"offset": "0x0018", "name": "LEFT_GAIN", "access": "rw", "width_bits": 24, "description": "Left output gain coefficient. Zero maps to unity gain."},
+        {"offset": "0x001c", "name": "RIGHT_GAIN", "access": "rw", "width_bits": 24, "description": "Right output gain coefficient. Zero maps to unity gain."},
+        {"offset": "0x0020", "name": "OSC0_GAIN", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 0 gain coefficient."},
+        {"offset": "0x0024", "name": "OSC1_GAIN", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 1 gain coefficient."},
+        {"offset": "0x0028", "name": "OSC2_GAIN", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 2 gain coefficient."},
+        {"offset": "0x002c", "name": "OSC3_GAIN", "access": "rw", "width_bits": 24, "description": "Four-oscillator synth oscillator 3 gain coefficient."},
+        {"offset": "0x0030", "name": "WAVE_CONTROL", "access": "rw", "description": "Loadable wavetable control. Bits [9:8] select waveform page 0-3 and bits [7:0] select the 256-sample positive half-period index."},
+        {"offset": "0x0034", "name": "OSC_PAN", "access": "rw", "description": "Packed four-oscillator pan controls. Bytes [7:0], [15:8], [23:16], and [31:24] control oscillators 0-3. 0x80 is center; unwritten 0x00 is treated as center by the TDM mixer."},
+        {"offset": "0x0038", "name": "GLOBAL_PAN", "access": "rw", "description": "Selected-output global stereo balance/pan. Byte [7:0] uses 0x80 as center; unwritten 0x00 is treated as center."},
+        {"offset": "0x003c", "name": "WAVE_DATA", "access": "rw", "width_bits": 16, "description": "Writing this register stores signed bits [15:0] into the half-period wavetable address selected by WAVE_CONTROL[9:0]. Playback reconstructs the opposite half by sign inversion and interpolates adjacent samples."},
+        {"offset": "0x0040-0x007c", "name": "POLY_FREQ0..15", "access": "rw", "width_bits": 24, "description": "Sixteen polyphonic synth voice phase increments."},
+        {"offset": "0x0080-0x00bc", "name": "POLY_CTRL0..15", "access": "rw", "description": "Sixteen polyphonic synth voice control words. Bit 0 is gate and bit 1 enables the voice."},
+        {"offset": "0x00c0-0x00fc", "name": "POLY_VOLUME0..15", "access": "rw", "description": "Sixteen packed voice waveform volume words. Four 8-bit fields control ramp, square, triangle, and inverted-ramp waveform contribution."},
+        {"offset": "0x0100-0x013c", "name": "POLY_ADSR0..15", "access": "rw", "description": "Sixteen packed ADSR words. Bytes [7:0], [15:8], [23:16], and [31:24] encode attack, decay, sustain, and release."},
+        {"offset": "0x0140", "name": "LFO_CONTROL", "access": "rw", "description": "Four-LFO control word. Bits [3:0] enable LFOs 0-3. Bits [15:8] hold packed 2-bit waveform selectors. Bits [23:16] hold packed 2-bit targets: 00 off, 01 oscillator frequency modulation, 10 global pan modulation."},
+        {"offset": "0x0144-0x0150", "name": "LFO_FREQ0..3", "access": "rw", "width_bits": 24, "description": "Four 24-bit LFO phase increments."},
+        {"offset": "0x0154-0x0160", "name": "LFO_DEPTH0..3", "access": "rw", "width_bits": 18, "description": "Four LFO depth coefficients. Zero disables that LFO contribution."},
+        {"offset": "0x0164", "name": "LFO_WAVE_CONTROL", "access": "rw", "description": "Loadable LFO wavetable control. Bits [10:9] select waveform page 0-3 and bits [8:0] select the 512-sample positive half-period index."},
+        {"offset": "0x0168", "name": "LFO_WAVE_DATA", "access": "rw", "width_bits": 16, "description": "Writing this register stores signed bits [15:0] into the LFO half-period wavetable address selected by LFO_WAVE_CONTROL[10:0]."},
+        {"offset": "0x016c", "name": "EQ_CONTROL", "access": "rw", "description": "Bit 0 enables the global stereo EQ. Writing bit 8 requests a shadow-to-active coefficient commit."},
+        {"offset": "0x0170", "name": "EQ_COEFF_ADDR", "access": "rw", "description": "Indirect EQ coefficient index. Five sections use 25 indices: section n uses n*5+0..4 for b0, b1, b2, a1, and a2."},
+        {"offset": "0x0174", "name": "EQ_COEFF_DATA", "access": "w", "width_bits": 32, "description": "Writing this register stores a signed Q3.28 coefficient into the shadow coefficient selected by EQ_COEFF_ADDR."},
+        {"offset": "0x0178", "name": "EQ_SMOOTH", "access": "rw", "description": "Reserved for future coefficient slew/crossfade control. Current hardware writes coefficients into the inactive DPB bank and flips the active bank on commit."},
+        {"offset": "0x0180", "name": "RO_ID", "access": "ro", "description": "Read-only design ID, ASCII FPGA."},
+        {"offset": "0x0184", "name": "RO_VERSION", "access": "ro", "description": "Read-only board design version, currently 0x00000202."},
+        {"offset": "0x0188", "name": "RO_STATUS", "access": "ro", "description": "PLL, reset, DAC, EQ, LFO, wavetable, and poly synth status bits."},
+        {"offset": "0x018c", "name": "RO_WAVE_COUNT", "access": "ro", "description": "Compatibility wave-control write count mirror."},
+        {"offset": "0x0190", "name": "RO_DEBUG_STATUS", "access": "ro", "description": "RadDebugHub IRQ plus register bridge error bits."},
+        {"offset": "0x0194", "name": "RO_RPI_SAMPLE", "access": "ro", "description": "Lower 32 bits of the last captured Raspberry Pi lane-0 I2S frame."},
+        {"offset": "0x0198", "name": "RO_ADC_SAMPLE", "access": "ro", "description": "Lower 32 bits of the last captured codec ADC I2S frame."}
+      ]
+    },
+    {
+      "id": "raddebughub_i2c_regs_0x42",
+      "address_width": 16,
+      "data_width": 32,
+      "endianness": "little",
+      "registers": [
+        {"offset": "0x0000+", "name": "RADDEBUGHUB", "access": "rw", "description": "RadDebugHub register interface exposed through a second radif_i2c_slave_to_reg bridge at I2C address 0x42."}
+      ]
+    }
+  ]
+}

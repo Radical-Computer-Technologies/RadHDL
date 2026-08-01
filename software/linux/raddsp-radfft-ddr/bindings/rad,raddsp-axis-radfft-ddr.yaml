@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: MIT
+%YAML 1.2
+---
+$id: http://radhdl.local/schemas/rad,raddsp-axis-radfft-ddr.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RADHDL RADDsp DDR-backed RADFFT
+
+maintainers:
+  - RADHDL contributors
+
+description:
+  AXI-Lite controlled RADDsp RADFFT data mover and future DDR-backed FFT core.
+  The sample buffer is supplied through a reserved-memory region and can be
+  mapped by the Linux driver for userspace access.
+
+properties:
+  compatible:
+    enum:
+      - rad,raddsp-axis-radfft-ddr-1.0
+      - rad,raddsp-axis-radfft-ddr
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  memory-region:
+    maxItems: 1
+
+  dma-coherent: true
+
+required:
+  - compatible
+  - reg
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  - |
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        radfft0_buf: radfft-buffer@70000000 {
+            compatible = "shared-dma-pool";
+            reg = <0x0 0x70000000 0x0 0x04000000>;
+            no-map;
+        };
+    };
+
+    fft@a0000000 {
+        compatible = "rad,raddsp-axis-radfft-ddr-1.0";
+        reg = <0x0 0xa0000000 0x0 0x10000>;
+        interrupts = <0 89 4>;
+        memory-region = <&radfft0_buf>;
+        dma-coherent;
+    };

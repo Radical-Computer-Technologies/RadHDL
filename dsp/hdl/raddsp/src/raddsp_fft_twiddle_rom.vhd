@@ -1,9 +1,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
-
-library xpm;
-use xpm.vcomponents.all;
+use work.raddsp_fft_twiddle_pkg.all;
 
 -- Lookup ROM for FFT twiddle factors used by RadDSP FFT implementations.
 -- Returns fixed-point sine/cosine coefficients indexed by stage and butterfly position.
@@ -55,47 +53,73 @@ architecture rtl of raddsp_fft_twiddle_rom is
 
   constant C_ADDR_WIDTH : positive := clog2(G_POINTS);
   constant C_DATA_WIDTH : positive := 2 * G_TWIDDLE_WIDTH;
+  constant C_IS_XILINX : boolean := VENDOR = "xilinx" or VENDOR = "XILINX";
+  constant C_IS_LATTICE : boolean := VENDOR = "lattice" or VENDOR = "LATTICE" or VENDOR = "ecp5" or VENDOR = "ECP5";
   signal rom_addr : std_logic_vector(C_ADDR_WIDTH - 1 downto 0);
   signal rom_dout : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
   signal im_raw   : signed(G_TWIDDLE_WIDTH - 1 downto 0);
+
+  component radhdl_ram is
+    generic (
+      VENDOR : string := "xilinx"; DEVICE_FAMILY : string := "7series"; MODE : string := "tdp"; MEMORY_KIND : string := "bram";
+      DATA_WIDTH : positive := 18; ADDR_WIDTH : positive := 10; DEPTH : positive := 1024;
+      CLOCKING_MODE : string := "common_clock";
+      MEMORY_INIT_FILE : string := "none"; USE_MEM_INIT : integer := 0
+    );
+    port (
+      clka : in std_logic; rsta : in std_logic; a_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      a_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); a_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); a_we : in std_logic;
+      clkb : in std_logic; rstb : in std_logic; b_addr : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
+      b_din : in std_logic_vector(DATA_WIDTH - 1 downto 0); b_dout : out std_logic_vector(DATA_WIDTH - 1 downto 0); b_we : in std_logic
+    );
+  end component;
 begin
-  assert VENDOR = "xilinx" report "RADFFT twiddle ROM currently uses Xilinx XPM memory" severity failure;
-  assert G_INIT_FILE /= "none" report "RADFFT twiddle ROM requires a .mem init file" severity failure;
+  assert (not C_IS_XILINX) or G_INIT_FILE /= "none"
+    report "RADFFT Xilinx twiddle ROM requires a .mem init file"
+    severity failure;
 
   rom_addr <= std_logic_vector(resize(unsigned(addr_i), C_ADDR_WIDTH));
-  twiddle_re_o <= signed(rom_dout(C_DATA_WIDTH - 1 downto G_TWIDDLE_WIDTH));
   im_raw <= signed(rom_dout(G_TWIDDLE_WIDTH - 1 downto 0));
-  twiddle_im_o <= -im_raw when G_INVERSE_FFT else im_raw;
 
-  xpm_twiddle_i: xpm_memory_sprom
-    generic map (
-      MEMORY_SIZE => G_POINTS * C_DATA_WIDTH,
-      MEMORY_PRIMITIVE => G_MEMORY_STYLE,
-      ECC_MODE => "no_ecc",
-      MEMORY_INIT_FILE => G_INIT_FILE,
-      MEMORY_INIT_PARAM => "",
-      USE_MEM_INIT => 1,
-      USE_MEM_INIT_MMI => 0,
-      WAKEUP_TIME => "disable_sleep",
-      MESSAGE_CONTROL => 0,
-      MEMORY_OPTIMIZATION => "true",
-      READ_DATA_WIDTH_A => C_DATA_WIDTH,
-      ADDR_WIDTH_A => C_ADDR_WIDTH,
-      READ_RESET_VALUE_A => "0",
-      READ_LATENCY_A => 1,
-      RST_MODE_A => "SYNC"
-    )
-    port map (
-      sleep => '0',
-      clka => clk,
-      rsta => rst,
-      ena => '1',
-      regcea => '1',
-      addra => rom_addr,
-      injectsbiterra => '0',
-      injectdbiterra => '0',
-      douta => rom_dout,
-      sbiterra => open,
-      dbiterra => open
-    );
+  gen_xilinx_rom : if C_IS_XILINX generate
+    signal unused_dout_b : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
+  begin
+    twiddle_re_o <= signed(rom_dout(C_DATA_WIDTH - 1 downto G_TWIDDLE_WIDTH));
+    twiddle_im_o <= -im_raw when G_INVERSE_FFT else im_raw;
+
+    rom_i : radhdl_ram
+      generic map (
+        VENDOR => VENDOR,
+        DEVICE_FAMILY => DEVICE_FAMILY,
+        MODE => "rom",
+        MEMORY_KIND => G_MEMORY_STYLE,
+        DATA_WIDTH => C_DATA_WIDTH,
+        ADDR_WIDTH => C_ADDR_WIDTH,
+        DEPTH => G_POINTS,
+        CLOCKING_MODE => "common_clock",
+        MEMORY_INIT_FILE => G_INIT_FILE,
+        USE_MEM_INIT => 1
+      )
+      port map (
+        clka => clk,
+        rsta => rst,
+        a_addr => rom_addr,
+        a_din => (others => '0'),
+        a_dout => rom_dout,
+        a_we => '0',
+        clkb => clk,
+        rstb => rst,
+        b_addr => rom_addr,
+        b_din => (others => '0'),
+        b_dout => unused_dout_b,
+        b_we => '0'
+      );
+  end generate;
+
+  gen_lattice_function_rom : if C_IS_LATTICE generate
+  begin
+    rom_dout <= (others => '0');
+    twiddle_re_o <= to_signed(radfft_twiddle_re(G_POINTS, to_integer(unsigned(rom_addr)), G_TWIDDLE_WIDTH), G_TWIDDLE_WIDTH);
+    twiddle_im_o <= to_signed(radfft_twiddle_im(G_POINTS, to_integer(unsigned(rom_addr)), G_TWIDDLE_WIDTH, G_INVERSE_FFT), G_TWIDDLE_WIDTH);
+  end generate;
 end architecture;

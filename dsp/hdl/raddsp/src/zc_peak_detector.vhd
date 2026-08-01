@@ -8,6 +8,8 @@ use work.zc_reference_pkg.all;
 -- Tracks candidate correlation maxima and emits timing/score metadata for frame detector logic.
 entity zc_peak_detector is
   generic (
+    -- Selects the vendor-specific implementation path.
+    VENDOR          : string := "xilinx";
     -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.
     DEVICE_FAMILY   : string := "7series";
     -- Sets the bit width for G SAMPLE WIDTH values carried by this module.
@@ -52,7 +54,18 @@ end entity;
 architecture rtl of zc_peak_detector is
   constant C_LAST_OFFSET : integer := G_FRAME_SAMPLES - ZC_REF_LEN;
 
-  type sample_array_t is array (0 to G_FRAME_SAMPLES - 1) of signed(G_SAMPLE_WIDTH - 1 downto 0);
+  function addr_width(depth : positive) return positive is
+    variable v : natural := depth - 1;
+    variable w : positive := 1;
+  begin
+    while v > 1 loop
+      v := v / 2;
+      w := w + 1;
+    end loop;
+    return w;
+  end function;
+
+  constant C_FRAME_ADDR_WIDTH : positive := addr_width(G_FRAME_SAMPLES);
   type state_t is (
     S_CAPTURE,
     S_SCAN_ADDR,
@@ -71,11 +84,10 @@ architecture rtl of zc_peak_detector is
   signal wr_idx     : integer range 0 to G_FRAME_SAMPLES - 1 := 0;
   signal offset_idx : integer range 0 to C_LAST_OFFSET := 0;
   signal zc_idx     : integer range 0 to ZC_REF_LEN - 1 := 0;
-  signal frame_i    : sample_array_t := (others => (others => '0'));
-  signal frame_q    : sample_array_t := (others => (others => '0'));
-  attribute ram_style : string;
-  attribute ram_style of frame_i : signal is "block";
-  attribute ram_style of frame_q : signal is "block";
+  signal frame_wr_en : std_logic := '0';
+  signal frame_wr_addr : unsigned(C_FRAME_ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal frame_wr_i : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
+  signal frame_wr_q : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal frame_rd_addr : integer range 0 to G_FRAME_SAMPLES - 1 := 0;
   signal frame_rd_i    : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal frame_rd_q    : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
@@ -136,40 +148,75 @@ begin
   peak_q <= best_q;
   peak_mag_sq <= best_mag;
 
-  rr_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  frame_i_ram : entity work.radhdl_sample_ram
+    generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
+      DATA_WIDTH => G_SAMPLE_WIDTH,
+      ADDR_WIDTH => C_FRAME_ADDR_WIDTH,
+      DEPTH => G_FRAME_SAMPLES
+    )
+    port map (
+      clk => clk,
+      wr_en => frame_wr_en,
+      wr_addr => frame_wr_addr,
+      wr_data => frame_wr_i,
+      rd_addr => to_unsigned(frame_rd_addr, C_FRAME_ADDR_WIDTH),
+      rd_data => frame_rd_i
+    );
+
+  frame_q_ram : entity work.radhdl_sample_ram
+    generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
+      DATA_WIDTH => G_SAMPLE_WIDTH,
+      ADDR_WIDTH => C_FRAME_ADDR_WIDTH,
+      DEPTH => G_FRAME_SAMPLES
+    )
+    port map (
+      clk => clk,
+      wr_en => frame_wr_en,
+      wr_addr => frame_wr_addr,
+      wr_data => frame_wr_q,
+      rd_addr => to_unsigned(frame_rd_addr, C_FRAME_ADDR_WIDTH),
+      rd_data => frame_rd_q
+    );
+
+  rr_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xi, b_i => mul_ci,
       valid_o => rr_valid, subtract_o => unused_sub0, last_o => unused_last0, p_o => rr_p
     );
 
-  qq_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  qq_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xq, b_i => mul_cq,
       valid_o => unused_valid0, subtract_o => unused_sub1, last_o => unused_last1, p_o => qq_p
     );
 
-  qi_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  qi_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xq, b_i => mul_ci,
       valid_o => unused_valid1, subtract_o => unused_sub2, last_o => unused_last2, p_o => qi_p
     );
 
-  iq_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  iq_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xi, b_i => mul_cq,
       valid_o => unused_valid2, subtract_o => unused_sub3, last_o => unused_last3, p_o => iq_p
     );
 
-  mag_square_i: entity work.raddsp_xilinx_dsp48_square_seq
+  mag_square_i: entity work.raddsp_square_seq
     generic map (
+      VENDOR => VENDOR,
       DEVICE_FAMILY => DEVICE_FAMILY,
       WIDTH         => G_ACC_WIDTH
     )
@@ -197,6 +244,10 @@ begin
         wr_idx <= 0;
         offset_idx <= 0;
         zc_idx <= 0;
+        frame_wr_en <= '0';
+        frame_wr_addr <= (others => '0');
+        frame_wr_i <= (others => '0');
+        frame_wr_q <= (others => '0');
         frame_rd_addr <= 0;
         frame_rd_i <= (others => '0');
         frame_rd_q <= (others => '0');
@@ -221,8 +272,7 @@ begin
         best_idx <= 0;
         valid_reg <= '0';
       else
-        frame_rd_i <= frame_i(frame_rd_addr);
-        frame_rd_q <= frame_q(frame_rd_addr);
+        frame_wr_en <= '0';
         mul_valid <= '0';
         mag_start <= '0';
         valid_reg <= '0';
@@ -234,8 +284,10 @@ begin
             end if;
 
             if sample_valid = '1' then
-              frame_i(wr_idx) <= sample_i;
-              frame_q(wr_idx) <= sample_q;
+              frame_wr_en <= '1';
+              frame_wr_addr <= to_unsigned(wr_idx, C_FRAME_ADDR_WIDTH);
+              frame_wr_i <= sample_i;
+              frame_wr_q <= sample_q;
               if wr_idx = G_FRAME_SAMPLES - 1 then
                 wr_idx <= 0;
                 offset_idx <= 0;

@@ -1,0 +1,34 @@
+{
+  "schema": "radhdl.board.v1",
+  "name": "colorlight-i9-v7.2",
+  "display_name": "Colorlight i9 v7.2",
+  "vendor": "Colorlight",
+  "fpga": {
+    "vendor": "lattice",
+    "family": "ecp5",
+    "device": "LFE5U-45F",
+    "part": "LFE5U-45F-6BG381C",
+    "nextpnr_device": "45k",
+    "package": "CABGA381"
+  },
+  "clocks": [
+    {
+      "name": "clk_25m_i",
+      "frequency_hz": 25000000,
+      "pin": "P3"
+    }
+  ],
+  "programming": {
+    "openfpgaloader_board": "colorlight-i9",
+    "volatile": true,
+    "flash": true
+  },
+  "constraints": {
+    "lpf": "colorlight_i9_v7_2.lpf"
+  },
+  "references": [
+    "https://github.com/wuxx/Colorlight-FPGA-Projects/blob/master/colorlight_i9_v7.2.md",
+    "https://umarcor.github.io/openFPGALoader/compatibility/board.html",
+    "https://hdl.github.io/constraints/Data/Boards/index.html"
+  ]
+}

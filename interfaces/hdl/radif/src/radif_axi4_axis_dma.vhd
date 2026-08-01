@@ -130,8 +130,12 @@ entity radif_axi4_axis_dma is
 end entity;
 
 architecture rtl of radif_axi4_axis_dma is
-  component xpm_fifo_sync
+  component radhdl_fifo
     generic (
+      VENDOR              : string  := "xilinx";
+      DEVICE_FAMILY       : string  := "7series";
+      FIFO_MODE           : string  := "sync";
+      ASYNC               : boolean := false;
       -- Configures CASCADE HEIGHT for this instance.
       CASCADE_HEIGHT      : integer := 0;
       -- Configures DOUT RESET VALUE for this instance.
@@ -214,6 +218,8 @@ architecture rtl of radif_axi4_axis_dma is
       rst           : in  std_logic;
       -- Sleep interface signal.
       sleep         : in  std_logic;
+      -- Optional read clock for asynchronous FIFO mode.
+      rd_clk        : in  std_logic := '0';
       -- Clock for the associated synchronous logic and handshake domain.
       wr_clk        : in  std_logic;
       -- Wr en interface signal.
@@ -451,8 +457,10 @@ begin
   begin
   end generate;
 
-  u_mm2s_fifo : xpm_fifo_sync
+  u_mm2s_fifo : radhdl_fifo
     generic map (
+      VENDOR => VENDOR_TAG,
+      DEVICE_FAMILY => PRODUCT_SERIES_TAG,
       FIFO_MEMORY_TYPE => "auto",
       FIFO_WRITE_DEPTH => FIFO_DEPTH,
       WRITE_DATA_WIDTH => MM_FIFO_WIDTH,
@@ -491,8 +499,10 @@ begin
       wr_en => mm_fifo_wr_en
     );
 
-  u_s2mm_fifo : xpm_fifo_sync
+  u_s2mm_fifo : radhdl_fifo
     generic map (
+      VENDOR => VENDOR_TAG,
+      DEVICE_FAMILY => PRODUCT_SERIES_TAG,
       FIFO_MEMORY_TYPE => "auto",
       FIFO_WRITE_DEPTH => FIFO_DEPTH,
       WRITE_DATA_WIDTH => S2_FIFO_WIDTH,

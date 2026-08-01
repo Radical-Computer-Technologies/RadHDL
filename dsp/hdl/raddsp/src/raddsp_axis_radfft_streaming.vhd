@@ -219,19 +219,19 @@ begin
     tw_re_i(bin) <= to_signed(radfft_twiddle_re(G_POINTS, const_mod_sum(sample_index_r, C_BIN, G_POINTS), G_TWIDDLE_WIDTH), G_TWIDDLE_WIDTH);
     tw_im_i(bin) <= to_signed(radfft_twiddle_im(G_POINTS, const_mod_sum(sample_index_r, C_BIN, G_POINTS), G_TWIDDLE_WIDTH, G_INVERSE_FFT), G_TWIDDLE_WIDTH);
 
-    rr_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+    rr_mul_i: entity work.raddsp_wide_mul
       generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_INPUT_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_ACC_WIDTH)
       port map (clk => clk, rst => rst, valid_i => mul_valid_i, a_i => sample_re_i, b_i => tw_re_i(bin), valid_o => rr_valid(bin), p_o => rr_p(bin));
 
-    ii_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+    ii_mul_i: entity work.raddsp_wide_mul
       generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_INPUT_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_ACC_WIDTH)
       port map (clk => clk, rst => rst, valid_i => mul_valid_i, a_i => sample_im_i, b_i => tw_im_i(bin), valid_o => open, p_o => ii_p(bin));
 
-    ri_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+    ri_mul_i: entity work.raddsp_wide_mul
       generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_INPUT_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_ACC_WIDTH)
       port map (clk => clk, rst => rst, valid_i => mul_valid_i, a_i => sample_re_i, b_i => tw_im_i(bin), valid_o => open, p_o => ri_p(bin));
 
-    ir_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+    ir_mul_i: entity work.raddsp_wide_mul
       generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_INPUT_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_ACC_WIDTH)
       port map (clk => clk, rst => rst, valid_i => mul_valid_i, a_i => sample_im_i, b_i => tw_re_i(bin), valid_o => open, p_o => ir_p(bin));
   end generate;

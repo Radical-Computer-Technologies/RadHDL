@@ -1,0 +1,57 @@
+{
+  "$schema": "../../../RadBuild/radbuild/schemas/settings-v2.schema.json",
+  "radbuild_schema": "2.0",
+  "radbuild_version": "0.2.1",
+  "project_name": "colorlight_i9_radif_spi_smoke",
+  "systems": [
+    {
+      "id": "colorlight-i9-radif-spi",
+      "type": "fpga.ecp5",
+      "name": "Colorlight i9 RADIF SPI smoke bitstream",
+      "provider": "oss-cad-suite",
+      "depends_on": [],
+      "toolchain": {
+        "vendor": "lattice",
+        "modelseries": "ecp5",
+        "version": "2026.07",
+        "suite_root": "/home/jvincent/oss-cad-suite/oss-cad-suite"
+      },
+      "config": {
+        "board": "colorlight-i9-v7.2",
+        "part": "LFE5U-45F-6BG381C",
+        "device": "45k",
+        "package": "CABGA381",
+        "top": "colorlight_i9_radif_spi_smoke_top",
+        "target_frequency_mhz": 25,
+        "source_root": "../..",
+        "sources": [
+          "interfaces/hdl/radif/src/radif_pkg.vhd",
+          "interfaces/hdl/radif/src/radif_spi_slave_to_reg.vhd",
+          "projects/colorlight_i9_radif_spi_smoke/src/colorlight_i9_radif_spi_smoke_top.vhd"
+        ],
+        "constraints_lpf": "projects/boards/colorlight_i9_v7_2/colorlight_i9_v7_2.lpf",
+        "programmer_board": "colorlight-i9",
+        "testbenches": [
+          {
+            "top": "tb_colorlight_i9_radif_spi_smoke",
+            "sources": [
+              "projects/colorlight_i9_radif_spi_smoke/testbenches/tb_colorlight_i9_radif_spi_smoke.vhd"
+            ],
+            "stop_time": "500us"
+          }
+        ]
+      },
+      "hdl": {
+        "instances": []
+      }
+    }
+  ],
+  "connections": [],
+  "artifacts": [],
+  "deploy": [],
+  "packages": {},
+  "legacy": {
+    "vendor": "lattice",
+    "modelseries": "ecp5"
+  }
+}

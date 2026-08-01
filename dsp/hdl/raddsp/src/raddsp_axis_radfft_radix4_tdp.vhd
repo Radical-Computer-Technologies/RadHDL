@@ -361,19 +361,19 @@ begin
       );
   end generate;
 
-  rr_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+  rr_mul_i: entity work.raddsp_wide_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => C_ACC_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_MUL_WIDTH)
     port map (clk => clk, rst => rst, valid_i => mul_valid_r, a_i => mul_a_re_r, b_i => tw_re_s, valid_o => rr_valid, p_o => rr_p);
 
-  ii_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+  ii_mul_i: entity work.raddsp_wide_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => C_ACC_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_MUL_WIDTH)
     port map (clk => clk, rst => rst, valid_i => mul_valid_r, a_i => mul_a_im_r, b_i => tw_im_s, valid_o => open, p_o => ii_p);
 
-  ri_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+  ri_mul_i: entity work.raddsp_wide_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => C_ACC_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_MUL_WIDTH)
     port map (clk => clk, rst => rst, valid_i => mul_valid_r, a_i => mul_a_re_r, b_i => tw_im_s, valid_o => open, p_o => ri_p);
 
-  ir_mul_i: entity work.raddsp_xilinx_dsp48_wide_mul
+  ir_mul_i: entity work.raddsp_wide_mul
     generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => C_ACC_WIDTH, B_WIDTH => G_TWIDDLE_WIDTH, PRODUCT_WIDTH => C_MUL_WIDTH)
     port map (clk => clk, rst => rst, valid_i => mul_valid_r, a_i => mul_a_im_r, b_i => tw_re_s, valid_o => open, p_o => ir_p);
 

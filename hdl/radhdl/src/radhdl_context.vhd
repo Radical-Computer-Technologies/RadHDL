@@ -10,4 +10,6 @@ context radhdl_context is
   use radhdl.dsp.all;
   use radhdl.interfaces.all;
   use radhdl.debug.all;
+  use radhdl.RadCDC.all;
+  use radhdl.RadPrimitive.all;
 end context radhdl_context;

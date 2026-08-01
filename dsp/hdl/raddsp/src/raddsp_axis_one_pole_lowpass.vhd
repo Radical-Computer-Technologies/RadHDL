@@ -134,8 +134,9 @@ begin
     m_axis_tdata <= out_data_r;
     m_axis_tlast <= out_last_r;
 
-    dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
+    dsp_mul_i: entity work.raddsp_mul
       generic map (
+        VENDOR => VENDOR,
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => C_DELTA_WIDTH,
         B_WIDTH => COEFF_WIDTH

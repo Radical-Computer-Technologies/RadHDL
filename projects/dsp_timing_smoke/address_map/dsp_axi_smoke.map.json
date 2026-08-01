@@ -1,0 +1,176 @@
+{
+  "name": "radhdl_dsp_axi_smoke",
+  "description": "AXI4-Lite register map for the RadHDL DSP timing-smoke project.",
+  "schema_version": 1,
+  "version": "0.1.0",
+  "compatibility": {
+    "radlib_min_version": "0.1.0",
+    "radhdl_min_schema_version": 1
+  },
+  "data_width": 32,
+  "address_width": 16,
+  "transport": {
+    "type": "custom",
+    "name": "zynq_ps_axi_lite",
+    "device": "ps_axi_lite"
+  },
+  "regions": [
+    {
+      "name": "control",
+      "base": "0x0000",
+      "mask": "0xF000",
+      "registers": [
+        { "name": "control", "offset": "0x0000", "access": "rw", "description": "bit0 enable, bit1 soft reset, bit2 clear" },
+        { "name": "scratch0", "offset": "0x0004", "access": "rw" },
+        { "name": "scratch1", "offset": "0x0008", "access": "rw" },
+        { "name": "magic", "offset": "0x0020", "access": "ro" },
+        { "name": "version", "offset": "0x0024", "access": "ro" },
+        { "name": "status", "offset": "0x0028", "access": "ro" },
+        { "name": "sample_counter", "offset": "0x002C", "access": "ro" }
+      ]
+    },
+    {
+      "name": "dsp",
+      "base": "0x1000",
+      "mask": "0xF000",
+      "registers": [
+        { "name": "sample_offset", "offset": "0x0004", "access": "rw" },
+        { "name": "gain_coeff", "offset": "0x0008", "access": "rw" },
+        { "name": "lowpass_alpha", "offset": "0x000C", "access": "rw" },
+        { "name": "fir_tap0", "offset": "0x0010", "access": "rw" },
+        { "name": "fir_tap1", "offset": "0x0014", "access": "rw" },
+        { "name": "fir_tap2", "offset": "0x0018", "access": "rw" },
+        { "name": "fir_tap3", "offset": "0x001C", "access": "rw" },
+        { "name": "biquad_b0", "offset": "0x0020", "access": "rw" },
+        { "name": "biquad_b1", "offset": "0x0024", "access": "rw" },
+        { "name": "biquad_b2", "offset": "0x0028", "access": "rw" },
+        { "name": "biquad_a1", "offset": "0x002C", "access": "rw" },
+        { "name": "biquad_a2", "offset": "0x0030", "access": "rw" },
+        { "name": "dds_phase_inc", "offset": "0x0034", "access": "rw" },
+        { "name": "dds_phase_offset", "offset": "0x0038", "access": "rw" },
+        { "name": "dds_wave_we", "offset": "0x003C", "access": "rw" },
+        { "name": "dds_wave_addr", "offset": "0x0040", "access": "rw" },
+        { "name": "dds_wave_data", "offset": "0x0044", "access": "rw" },
+        { "name": "matrix_op", "offset": "0x0048", "access": "rw" },
+        { "name": "stats_peak", "offset": "0x0080", "access": "ro" },
+        { "name": "stats_count", "offset": "0x0084", "access": "ro" },
+        { "name": "stats_power_lo", "offset": "0x0088", "access": "ro" },
+        { "name": "stats_power_hi", "offset": "0x008C", "access": "ro" },
+        { "name": "matrix_dot_result_lo", "offset": "0x0090", "access": "ro" },
+        { "name": "matrix_dot_result_hi", "offset": "0x0094", "access": "ro" },
+        { "name": "matrix_dot_count", "offset": "0x0098", "access": "ro" },
+        { "name": "dds_phase", "offset": "0x009C", "access": "ro" },
+        { "name": "dds_lut_addr", "offset": "0x00A0", "access": "ro" },
+        { "name": "gain_last", "offset": "0x00A4", "access": "ro" },
+        { "name": "biquad_last", "offset": "0x00A8", "access": "ro" },
+        { "name": "matrix_last", "offset": "0x00AC", "access": "ro" },
+        { "name": "iq_magnitude", "offset": "0x00B0", "access": "ro" }
+      ]
+    },
+    {
+      "name": "dma",
+      "base": "0x2000",
+      "mask": "0xF000",
+      "registers": [
+        { "name": "control", "offset": "0x0000", "access": "rw", "description": "bit0 MM2S enable, bit1 MM2S circular, bit8 S2MM enable, bit9 S2MM circular" },
+        { "name": "status_clear", "offset": "0x0004", "access": "rw", "description": "write-one-to-clear DMA status bits" },
+        { "name": "mm2s_base_lo", "offset": "0x0008", "access": "rw" },
+        { "name": "mm2s_base_hi", "offset": "0x000C", "access": "rw" },
+        { "name": "mm2s_end_lo", "offset": "0x0010", "access": "rw" },
+        { "name": "mm2s_end_hi", "offset": "0x0014", "access": "rw" },
+        { "name": "mm2s_length_bytes", "offset": "0x0018", "access": "rw" },
+        { "name": "s2mm_base_lo", "offset": "0x001C", "access": "rw" },
+        { "name": "s2mm_base_hi", "offset": "0x0020", "access": "rw" },
+        { "name": "s2mm_end_lo", "offset": "0x0024", "access": "rw" },
+        { "name": "s2mm_end_hi", "offset": "0x0028", "access": "rw" },
+        { "name": "s2mm_length_bytes", "offset": "0x002C", "access": "rw" },
+        { "name": "mm2s_current_lo", "offset": "0x0030", "access": "ro" },
+        { "name": "s2mm_current_lo", "offset": "0x0034", "access": "ro" }
+      ]
+    }
+  ],
+  "dsp_accelerators": [
+    {
+      "name": "control0",
+      "type": "control",
+      "registers": {
+        "enable": "control.control",
+        "reset": "control.control",
+        "status": "control.status",
+        "sample_counter": "control.sample_counter"
+      }
+    },
+    {
+      "name": "gain0",
+      "type": "gain",
+      "registers": { "gain": "dsp.gain_coeff" }
+    },
+    {
+      "name": "biquad0",
+      "type": "biquad",
+      "registers": {
+        "b0": "dsp.biquad_b0",
+        "b1": "dsp.biquad_b1",
+        "b2": "dsp.biquad_b2",
+        "a1": "dsp.biquad_a1",
+        "a2": "dsp.biquad_a2"
+      }
+    },
+    {
+      "name": "dds0",
+      "type": "dds",
+      "registers": {
+        "phase_increment": "dsp.dds_phase_inc",
+        "phase_offset": "dsp.dds_phase_offset",
+        "waveform_write_enable": "dsp.dds_wave_we",
+        "waveform_address": "dsp.dds_wave_addr",
+        "waveform_data": "dsp.dds_wave_data",
+        "phase": "dsp.dds_phase"
+      }
+    },
+    {
+      "name": "stats0",
+      "type": "frame_stats",
+      "registers": {
+        "peak": "dsp.stats_peak",
+        "sample_count": "dsp.stats_count",
+        "sum_squares": "dsp.stats_power_lo"
+      }
+    },
+    {
+      "name": "matrix_elem0",
+      "type": "matrix_elementwise",
+      "registers": { "operation": "dsp.matrix_op" }
+    },
+    {
+      "name": "matrix_dot0",
+      "type": "matrix_dot",
+      "registers": {
+        "result": "dsp.matrix_dot_result_lo",
+        "sample_count": "dsp.matrix_dot_count",
+        "result_hi": "dsp.matrix_dot_result_hi"
+      }
+    },
+    {
+      "name": "dma0",
+      "type": "axi_dma",
+      "block": "radif_axi4_axis_dma",
+      "registers": {
+        "control": "dma.control",
+        "status_clear": "dma.status_clear",
+        "mm2s_base_lo": "dma.mm2s_base_lo",
+        "mm2s_base_hi": "dma.mm2s_base_hi",
+        "mm2s_end_lo": "dma.mm2s_end_lo",
+        "mm2s_end_hi": "dma.mm2s_end_hi",
+        "mm2s_length_bytes": "dma.mm2s_length_bytes",
+        "s2mm_base_lo": "dma.s2mm_base_lo",
+        "s2mm_base_hi": "dma.s2mm_base_hi",
+        "s2mm_end_lo": "dma.s2mm_end_lo",
+        "s2mm_end_hi": "dma.s2mm_end_hi",
+        "s2mm_length_bytes": "dma.s2mm_length_bytes",
+        "mm2s_current_lo": "dma.mm2s_current_lo",
+        "s2mm_current_lo": "dma.s2mm_current_lo"
+      }
+    }
+  ]
+}

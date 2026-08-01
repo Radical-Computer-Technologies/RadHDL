@@ -53,3 +53,15 @@ Optional IP repository paths are available for flows that need packaged IP:
 set_property ip_repo_paths [::RadHDL::ip_repo_paths dsp] [current_project]
 update_ip_catalog
 ```
+
+## Primitive Boundary
+
+New code should instantiate the public RadHDL wrappers instead of directly instantiating vendor primitives:
+
+- `radhdl_ram` for block/distributed/UltraRAM-style memory selection.
+- `radhdl_fifo`, `radhdl_fifo_sync`, and `radhdl_fifo_async` for FIFO selection.
+- `rad_cdc_*` primitives from `radcdc.vhd` for CDC-safe portable logic.
+
+Vendor-specific primitive names should remain below these boundaries. Xilinx wrappers bind to XPM, ECP5 wrappers bind to explicit Lattice primitive wrappers where hardware is targeted, and Gowin wrappers bind to Gowin EDA primitive/IP wrappers where available.
+
+For release checks, use `scripts/radhdl_sim_matrix.py` from the repository root. GHDL is the default portable simulator; Vivado/xsim remains the authoritative simulator for Xilinx XPM behavior because the XPM implementation bodies are SystemVerilog.

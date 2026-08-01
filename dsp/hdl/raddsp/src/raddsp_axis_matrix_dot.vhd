@@ -88,8 +88,9 @@ begin
     m_axis_tlast <= out_valid_r;
     sample_count_o <= std_logic_vector(count_r);
 
-    dsp_mul_i: entity work.raddsp_xilinx_dsp48_mul
+    dsp_mul_i: entity work.raddsp_mul
       generic map (
+        VENDOR => VENDOR,
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,
         B_WIDTH => DATA_WIDTH

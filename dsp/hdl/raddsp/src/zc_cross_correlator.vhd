@@ -8,6 +8,8 @@ use work.zc_reference_pkg.all;
 -- Computes correlation energy between an incoming complex stream and a stored reference sequence.
 entity zc_cross_correlator is
   generic (
+    -- Selects the vendor-specific implementation path.
+    VENDOR          : string := "xilinx";
     -- Identifies the target FPGA family so wrappers can choose the correct primitive or conservative portable behavior.
     DEVICE_FAMILY : string := "7series";
     -- Sets the bit width for G SAMPLE WIDTH values carried by this module.
@@ -46,7 +48,18 @@ entity zc_cross_correlator is
 end entity;
 
 architecture rtl of zc_cross_correlator is
-  type sample_array_t is array (0 to ZC_REF_LEN - 1) of signed(G_SAMPLE_WIDTH - 1 downto 0);
+  function addr_width(depth : positive) return positive is
+    variable v : natural := depth - 1;
+    variable w : positive := 1;
+  begin
+    while v > 1 loop
+      v := v / 2;
+      w := w + 1;
+    end loop;
+    return w;
+  end function;
+
+  constant C_SAMPLE_ADDR_WIDTH : positive := addr_width(ZC_REF_LEN);
   type state_t is (
     S_COLLECT,
     S_MAC_ADDR,
@@ -63,11 +76,10 @@ architecture rtl of zc_cross_correlator is
   signal state       : state_t := S_COLLECT;
   signal wr_idx      : integer range 0 to ZC_REF_LEN - 1 := 0;
   signal mac_idx     : integer range 0 to ZC_REF_LEN - 1 := 0;
-  signal samples_i   : sample_array_t := (others => (others => '0'));
-  signal samples_q   : sample_array_t := (others => (others => '0'));
-  attribute ram_style : string;
-  attribute ram_style of samples_i : signal is "block";
-  attribute ram_style of samples_q : signal is "block";
+  signal sample_wr_en : std_logic := '0';
+  signal sample_wr_addr : unsigned(C_SAMPLE_ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal sample_wr_i : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
+  signal sample_wr_q : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal sample_rd_addr : integer range 0 to ZC_REF_LEN - 1 := 0;
   signal sample_rd_i    : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
   signal sample_rd_q    : signed(G_SAMPLE_WIDTH - 1 downto 0) := (others => '0');
@@ -122,40 +134,75 @@ begin
   corr_q <= corr_q_reg;
   corr_mag_sq <= mag_reg;
 
-  rr_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  sample_i_ram : entity work.radhdl_sample_ram
+    generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
+      DATA_WIDTH => G_SAMPLE_WIDTH,
+      ADDR_WIDTH => C_SAMPLE_ADDR_WIDTH,
+      DEPTH => ZC_REF_LEN
+    )
+    port map (
+      clk => clk,
+      wr_en => sample_wr_en,
+      wr_addr => sample_wr_addr,
+      wr_data => sample_wr_i,
+      rd_addr => to_unsigned(sample_rd_addr, C_SAMPLE_ADDR_WIDTH),
+      rd_data => sample_rd_i
+    );
+
+  sample_q_ram : entity work.radhdl_sample_ram
+    generic map (
+      VENDOR => VENDOR,
+      DEVICE_FAMILY => DEVICE_FAMILY,
+      DATA_WIDTH => G_SAMPLE_WIDTH,
+      ADDR_WIDTH => C_SAMPLE_ADDR_WIDTH,
+      DEPTH => ZC_REF_LEN
+    )
+    port map (
+      clk => clk,
+      wr_en => sample_wr_en,
+      wr_addr => sample_wr_addr,
+      wr_data => sample_wr_q,
+      rd_addr => to_unsigned(sample_rd_addr, C_SAMPLE_ADDR_WIDTH),
+      rd_data => sample_rd_q
+    );
+
+  rr_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xi, b_i => mul_ci,
       valid_o => rr_valid, subtract_o => unused_sub0, last_o => unused_last0, p_o => rr_p
     );
 
-  qq_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  qq_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xq, b_i => mul_cq,
       valid_o => unused_valid0, subtract_o => unused_sub1, last_o => unused_last1, p_o => qq_p
     );
 
-  qi_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  qi_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xq, b_i => mul_ci,
       valid_o => unused_valid1, subtract_o => unused_sub2, last_o => unused_last2, p_o => qi_p
     );
 
-  iq_mul_i: entity work.raddsp_xilinx_dsp48_mul
-    generic map (DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
+  iq_mul_i: entity work.raddsp_mul
+    generic map (VENDOR => VENDOR, DEVICE_FAMILY => DEVICE_FAMILY, A_WIDTH => G_SAMPLE_WIDTH, B_WIDTH => G_SAMPLE_WIDTH)
     port map (
       clk => clk, rst => rst, valid_i => mul_valid, subtract_i => '0', last_i => '0',
       a_i => mul_xi, b_i => mul_cq,
       valid_o => unused_valid2, subtract_o => unused_sub3, last_o => unused_last3, p_o => iq_p
     );
 
-  mag_square_i: entity work.raddsp_xilinx_dsp48_square_seq
+  mag_square_i: entity work.raddsp_square_seq
     generic map (
+      VENDOR => VENDOR,
       DEVICE_FAMILY => DEVICE_FAMILY,
       WIDTH         => G_ACC_WIDTH
     )
@@ -182,6 +229,10 @@ begin
         state <= S_COLLECT;
         wr_idx <= 0;
         mac_idx <= 0;
+        sample_wr_en <= '0';
+        sample_wr_addr <= (others => '0');
+        sample_wr_i <= (others => '0');
+        sample_wr_q <= (others => '0');
         sample_rd_addr <= 0;
         sample_rd_i <= (others => '0');
         sample_rd_q <= (others => '0');
@@ -201,8 +252,7 @@ begin
         mag_reg <= (others => '0');
         valid_reg <= '0';
       else
-        sample_rd_i <= samples_i(sample_rd_addr);
-        sample_rd_q <= samples_q(sample_rd_addr);
+        sample_wr_en <= '0';
         mul_valid <= '0';
         mag_start <= '0';
         valid_reg <= '0';
@@ -214,8 +264,10 @@ begin
             end if;
 
             if sample_valid = '1' then
-              samples_i(wr_idx) <= sample_i;
-              samples_q(wr_idx) <= sample_q;
+              sample_wr_en <= '1';
+              sample_wr_addr <= to_unsigned(wr_idx, C_SAMPLE_ADDR_WIDTH);
+              sample_wr_i <= sample_i;
+              sample_wr_q <= sample_q;
               if wr_idx = ZC_REF_LEN - 1 then
                 wr_idx <= 0;
                 mac_idx <= 0;

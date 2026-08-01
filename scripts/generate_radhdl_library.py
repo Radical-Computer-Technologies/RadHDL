@@ -20,6 +20,8 @@ RADHDL_API = [
     "hdl/radhdl/src/interfaces_smi.vhd",
     "hdl/radhdl/src/interfaces_spi.vhd",
     "hdl/radhdl/src/interfaces_uart.vhd",
+    "hdl/radhdl/src/radcdc.vhd",
+    "hdl/radhdl/src/radprimitive.vhd",
     "hdl/radhdl/src/debug.vhd",
     "hdl/radhdl/src/dsp_context.vhd",
     "hdl/radhdl/src/interfaces_context.vhd",
@@ -32,6 +34,27 @@ COMMON_PROTOCOL = [
     "common/hdl/src/radhdl_axi_pkg.vhd",
     "common/hdl/src/radhdl_axis_pkg.vhd",
     "common/hdl/src/radhdl_spi_pkg.vhd",
+]
+
+COMMON_PRIMITIVES = [
+    "common/hdl/src/radhdl_cdc.vhd",
+    "common/hdl/src/radhdl_xilinx_ram.vhd",
+    "common/hdl/src/radhdl_xilinx_fifo_sync.vhd",
+    "common/hdl/src/radhdl_xilinx_fifo_async.vhd",
+    "common/hdl/ecp5/radhdl_ecp5_dp16kd_18x1024.vhd",
+    "common/hdl/ecp5/radhdl_ecp5_mult18x18d.vhd",
+    "common/hdl/src/radhdl_lattice_tdp_ram.vhd",
+    "common/hdl/src/radhdl_lattice_ram.vhd",
+    "common/hdl/src/radhdl_ram.vhd",
+    "common/hdl/src/radhdl_lattice_fifo8kb.vhd",
+    "common/hdl/src/radhdl_gowin_fifo_sc_sync.vhd",
+    "common/hdl/src/radhdl_gowin_fifo_hs_async.vhd",
+    "common/hdl/src/radhdl_fifo_bram_sync.vhd",
+    "common/hdl/src/radhdl_fifo_bram_async.vhd",
+    "common/hdl/src/radhdl_fifo_sync.vhd",
+    "common/hdl/src/radhdl_fifo_async.vhd",
+    "common/hdl/src/radhdl_fifo.vhd",
+    "common/hdl/src/radhdl_sample_ram.vhd",
 ]
 
 
@@ -49,8 +72,12 @@ DSP_RADDSP_RAW = [
     "dsp/hdl/raddsp/src/raddsp_fft_twiddle_rom.vhd",
     "dsp/hdl/raddsp/src/raddsp_sqrt_u32.vhd",
     "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_lattice_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_mul.vhd",
     "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_square_seq.vhd",
     "dsp/hdl/raddsp/src/raddsp_xilinx_dsp48_wide_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_wide_mul.vhd",
+    "dsp/hdl/raddsp/src/raddsp_square_seq.vhd",
     "dsp/hdl/raddsp/src/cordic_atan2.vhd",
     "dsp/hdl/raddsp/src/fft_radix2_batch_core.vhd",
     "dsp/hdl/raddsp/src/raddsp_axis_gain.vhd",
@@ -139,6 +166,7 @@ namespace eval ::RadHDL {{
     variable ROOT [file normalize [file join [file dirname [info script]] ..]]
     variable RADHDL_API_FILES {tcl_list(RADHDL_API)}
     variable COMMON_PROTOCOL_FILES {tcl_list(COMMON_PROTOCOL)}
+    variable COMMON_PRIMITIVE_FILES {tcl_list(COMMON_PRIMITIVES)}
     variable DEBUG_RADILA_FILES {tcl_list(DEBUG_RADILA)}
     variable DSP_RADDSP_RAW_FILES {tcl_list(DSP_RADDSP_RAW)}
     variable DSP_RADDSP_XCI_FILES {tcl_list(DSP_RADDSP_XCI)}
@@ -150,6 +178,7 @@ namespace eval ::RadHDL {{
         variable DEBUG_RADILA_FILES
         variable RADHDL_API_FILES
         variable COMMON_PROTOCOL_FILES
+        variable COMMON_PRIMITIVE_FILES
         variable DSP_RADDSP_RAW_FILES
         variable DSP_RADDSP_XCI_FILES
         variable DSP_RADDSP_XCI_VHDL_FILES
@@ -159,12 +188,14 @@ namespace eval ::RadHDL {{
             radhdl.api {{ return $RADHDL_API_FILES }}
             radhdl.protocol {{ return $COMMON_PROTOCOL_FILES }}
             protocol {{ return $COMMON_PROTOCOL_FILES }}
-            radhdl.all {{ return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }}
-            all {{ return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }}
-            debug.radila {{ return $DEBUG_RADILA_FILES }}
-            debug {{ return $DEBUG_RADILA_FILES }}
-            dsp.raddsp.raw {{ return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }}
-            dsp.raw {{ return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }}
+            radhdl.primitives {{ return $COMMON_PRIMITIVE_FILES }}
+            primitives {{ return $COMMON_PRIMITIVE_FILES }}
+            radhdl.all {{ return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }}
+            all {{ return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }}
+            debug.radila {{ return [concat $COMMON_PRIMITIVE_FILES $DEBUG_RADILA_FILES] }}
+            debug {{ return [concat $COMMON_PRIMITIVE_FILES $DEBUG_RADILA_FILES] }}
+            dsp.raddsp.raw {{ return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES] }}
+            dsp.raw {{ return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES] }}
             dsp.raddsp.xci {{ return $DSP_RADDSP_XCI_FILES }}
             dsp.xci {{ return $DSP_RADDSP_XCI_FILES }}
             dsp.raddsp.xci_vhdl {{ return $DSP_RADDSP_XCI_VHDL_FILES }}

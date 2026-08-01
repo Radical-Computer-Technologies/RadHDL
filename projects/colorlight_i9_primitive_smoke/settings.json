@@ -1,0 +1,75 @@
+{
+  "$schema": "../../../RadBuild/radbuild/schemas/settings-v2.schema.json",
+  "radbuild_schema": "2.0",
+  "radbuild_version": "0.2.1",
+  "project_name": "colorlight_i9_primitive_smoke",
+  "systems": [
+    {
+      "id": "colorlight-i9-primitive-smoke",
+      "type": "fpga.ecp5",
+      "name": "Colorlight i9 explicit primitive smoke bitstream",
+      "provider": "oss-cad-suite",
+      "depends_on": [],
+      "toolchain": {
+        "vendor": "lattice",
+        "modelseries": "ecp5",
+        "version": "2026.07",
+        "suite_root": "/home/jvincent/oss-cad-suite/oss-cad-suite"
+      },
+      "config": {
+        "board": "colorlight-i9-v7.2",
+        "part": "LFE5U-45F-6BG381C",
+        "device": "45k",
+        "package": "CABGA381",
+        "top": "colorlight_i9_primitive_smoke_top",
+        "target_frequency_mhz": 25,
+        "source_root": "../..",
+        "sources": [
+          "common/hdl/ecp5/radhdl_ecp5_dp16kd_18x1024.vhd",
+          "common/hdl/ecp5/radhdl_ecp5_mult18x18d.vhd",
+          "common/hdl/src/radhdl_cdc.vhd",
+          "common/hdl/src/radhdl_lattice_tdp_ram.vhd",
+          "common/hdl/src/radhdl_lattice_ram.vhd",
+          "common/hdl/src/radhdl_ram.vhd",
+          "common/hdl/src/radhdl_fifo_bram_sync.vhd",
+          "common/hdl/src/radhdl_fifo_bram_async.vhd",
+          "common/hdl/src/radhdl_fifo_sync.vhd",
+          "common/hdl/src/radhdl_fifo_async.vhd",
+          "common/hdl/src/radhdl_fifo.vhd",
+          "dsp/hdl/raddsp/src/raddsp_lattice_mul.vhd",
+          "dsp/hdl/raddsp/src/raddsp_mul.vhd",
+          "projects/colorlight_i9_primitive_smoke/src/colorlight_i9_primitive_smoke_top.vhd"
+        ],
+        "constraints_lpf": "projects/boards/colorlight_i9_v7_2/colorlight_i9_v7_2.lpf",
+        "programmer_board": "colorlight-i9",
+        "testbenches": [
+          {
+            "top": "tb_raddsp_lattice_mul",
+            "sources": [
+              "projects/colorlight_i9_primitive_smoke/testbenches/tb_raddsp_lattice_mul.vhd"
+            ],
+            "stop_time": "1us"
+          },
+          {
+            "top": "tb_radhdl_fifo_bram_async",
+            "sources": [
+              "projects/colorlight_i9_primitive_smoke/testbenches/tb_radhdl_fifo_bram_async.vhd"
+            ],
+            "stop_time": "2us"
+          }
+        ]
+      },
+      "hdl": {
+        "instances": []
+      }
+    }
+  ],
+  "connections": [],
+  "artifacts": [],
+  "deploy": [],
+  "packages": {},
+  "legacy": {
+    "vendor": "lattice",
+    "modelseries": "ecp5"
+  }
+}

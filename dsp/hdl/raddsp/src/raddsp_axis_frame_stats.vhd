@@ -92,8 +92,9 @@ begin
     sum_squares_o <= std_logic_vector(power_out_r);
     sample_count_o <= std_logic_vector(count_out_r);
 
-    square_i: entity work.raddsp_xilinx_dsp48_mul
+    square_i: entity work.raddsp_mul
       generic map (
+        VENDOR => VENDOR,
         DEVICE_FAMILY => DEVICE_FAMILY,
         A_WIDTH => DATA_WIDTH,
         B_WIDTH => DATA_WIDTH

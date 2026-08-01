@@ -17,6 +17,8 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_smi.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_spi.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_uart.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src radcdc.vhd] \
+        [file join $::RadHDL::ROOT hdl radhdl src radprimitive.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src debug.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src dsp_context.vhd] \
         [file join $::RadHDL::ROOT hdl radhdl src interfaces_context.vhd] \
@@ -27,6 +29,26 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT common hdl src radhdl_axi_pkg.vhd] \
         [file join $::RadHDL::ROOT common hdl src radhdl_axis_pkg.vhd] \
         [file join $::RadHDL::ROOT common hdl src radhdl_spi_pkg.vhd] \
+    ]
+    variable COMMON_PRIMITIVE_FILES [list \
+        [file join $::RadHDL::ROOT common hdl src radhdl_cdc.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_xilinx_ram.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_xilinx_fifo_sync.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_xilinx_fifo_async.vhd] \
+        [file join $::RadHDL::ROOT common hdl ecp5 radhdl_ecp5_dp16kd_18x1024.vhd] \
+        [file join $::RadHDL::ROOT common hdl ecp5 radhdl_ecp5_mult18x18d.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_lattice_tdp_ram.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_lattice_ram.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_ram.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_lattice_fifo8kb.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_gowin_fifo_sc_sync.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_gowin_fifo_hs_async.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_fifo_bram_sync.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_fifo_bram_async.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_fifo_sync.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_fifo_async.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_fifo.vhd] \
+        [file join $::RadHDL::ROOT common hdl src radhdl_sample_ram.vhd] \
     ]
     variable DEBUG_RADILA_FILES [list \
         [file join $::RadHDL::ROOT debug radila hdl radila radila_core.vhd] \
@@ -41,8 +63,12 @@ namespace eval ::RadHDL {
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_fft_twiddle_rom.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_sqrt_u32.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_lattice_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_mul.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_square_seq.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_xilinx_dsp48_wide_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_wide_mul.vhd] \
+        [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_square_seq.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src cordic_atan2.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src fft_radix2_batch_core.vhd] \
         [file join $::RadHDL::ROOT dsp hdl raddsp src raddsp_axis_gain.vhd] \
@@ -120,6 +146,7 @@ namespace eval ::RadHDL {
         variable DEBUG_RADILA_FILES
         variable RADHDL_API_FILES
         variable COMMON_PROTOCOL_FILES
+        variable COMMON_PRIMITIVE_FILES
         variable DSP_RADDSP_RAW_FILES
         variable DSP_RADDSP_XCI_FILES
         variable DSP_RADDSP_XCI_VHDL_FILES
@@ -129,12 +156,14 @@ namespace eval ::RadHDL {
             radhdl.api { return $RADHDL_API_FILES }
             radhdl.protocol { return $COMMON_PROTOCOL_FILES }
             protocol { return $COMMON_PROTOCOL_FILES }
-            radhdl.all { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
-            all { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
-            debug.radila { return $DEBUG_RADILA_FILES }
-            debug { return $DEBUG_RADILA_FILES }
-            dsp.raddsp.raw { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }
-            dsp.raw { return [concat $COMMON_PROTOCOL_FILES $DSP_RADDSP_RAW_FILES] }
+            radhdl.primitives { return $COMMON_PRIMITIVE_FILES }
+            primitives { return $COMMON_PRIMITIVE_FILES }
+            radhdl.all { return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
+            all { return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES $INTERFACES_RADIF_FILES $DEBUG_RADILA_FILES $RADHDL_API_FILES] }
+            debug.radila { return [concat $COMMON_PRIMITIVE_FILES $DEBUG_RADILA_FILES] }
+            debug { return [concat $COMMON_PRIMITIVE_FILES $DEBUG_RADILA_FILES] }
+            dsp.raddsp.raw { return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES] }
+            dsp.raw { return [concat $COMMON_PROTOCOL_FILES $COMMON_PRIMITIVE_FILES $DSP_RADDSP_RAW_FILES] }
             dsp.raddsp.xci { return $DSP_RADDSP_XCI_FILES }
             dsp.xci { return $DSP_RADDSP_XCI_FILES }
             dsp.raddsp.xci_vhdl { return $DSP_RADDSP_XCI_VHDL_FILES }
