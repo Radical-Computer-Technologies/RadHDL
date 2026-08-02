@@ -31,24 +31,34 @@ def safe_name(name: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in name)
 
 
+def display_name(name: str) -> str:
+    return name.replace("_", " ").title()
+
+
 def plot_capture(name: str, description: str, data: np.ndarray, sample_rate: int, plot_frames: int) -> None:
-    fig, axes = plt.subplots(2, 1, figsize=(11, 7), constrained_layout=True)
-    fig.suptitle(f"{name}: {description}", fontsize=13)
+    fig, axes = plt.subplots(3, 1, figsize=(12, 8), constrained_layout=True)
+    fig.suptitle(display_name(name), fontsize=14, fontweight="bold")
 
     if data.size == 0:
         axes[0].text(0.5, 0.5, "No frames captured", ha="center", va="center", transform=axes[0].transAxes)
+        axes[0].set_title(description, fontsize=10)
         axes[1].axis("off")
+        axes[2].axis("off")
     else:
         n = min(len(data), plot_frames)
         t = np.arange(n) / sample_rate
-        axes[0].plot(t, data[:n, 0], label="Left", linewidth=1.4)
-        axes[0].plot(t, data[:n, 1], label="Right", linewidth=1.1, alpha=0.8)
-        axes[0].set_title("Time Domain")
-        axes[0].set_xlabel("Time (s)")
+        axes[0].plot(t, data[:n, 0], color="#1f77b4", linewidth=1.4)
+        axes[0].set_title("Left Channel")
         axes[0].axhline(0, color="black", linewidth=0.8, alpha=0.35)
         axes[0].set_ylabel("Signed sample")
         axes[0].grid(True, alpha=0.25)
-        axes[0].legend(loc="best")
+
+        axes[1].plot(t, data[:n, 1], color="#2ca02c", linewidth=1.4)
+        axes[1].set_title("Right Channel")
+        axes[1].set_xlabel("Time (s)")
+        axes[1].axhline(0, color="black", linewidth=0.8, alpha=0.35)
+        axes[1].set_ylabel("Signed sample")
+        axes[1].grid(True, alpha=0.25)
 
         fft_len = min(len(data), 2048)
         if fft_len >= 4:
@@ -57,15 +67,15 @@ def plot_capture(name: str, description: str, data: np.ndarray, sample_rate: int
             window = np.hanning(fft_len)
             spectrum = np.abs(np.fft.rfft(x * window))
             freqs = np.fft.rfftfreq(fft_len, d=1.0 / sample_rate)
-            axes[1].plot(freqs, spectrum, linewidth=1.2)
-            axes[1].set_xlim(0, min(sample_rate / 2, 6000))
-            axes[1].set_title("Left Channel FFT Quick Look")
-            axes[1].set_xlabel("Frequency (Hz)")
-            axes[1].set_ylabel("Magnitude")
-            axes[1].grid(True, alpha=0.25)
+            axes[2].plot(freqs, spectrum, color="#9467bd", linewidth=1.2)
+            axes[2].set_xlim(0, min(sample_rate / 2, 6000))
+            axes[2].set_title("Left Channel FFT Quick Look")
+            axes[2].set_xlabel("Frequency (Hz)")
+            axes[2].set_ylabel("Magnitude")
+            axes[2].grid(True, alpha=0.25)
         else:
-            axes[1].text(0.5, 0.5, "Not enough frames for FFT", ha="center", va="center", transform=axes[1].transAxes)
-            axes[1].axis("off")
+            axes[2].text(0.5, 0.5, "Not enough frames for FFT", ha="center", va="center", transform=axes[2].transAxes)
+            axes[2].axis("off")
 
     fig.savefig(PLOT_DIR / f"{safe_name(name)}.png", dpi=150)
     plt.close(fig)

@@ -4,6 +4,9 @@ RadHDL contains reusable HDL IP, board-independent driver source, host-tool sour
 
 Current release-prep branch target: `0.2.2-beta.1`.
 
+RadHDL is open source. See [CONTRIBUTING.md](CONTRIBUTING.md) for the current
+branch, simulation, primitive-wrapper, and pull-request expectations.
+
 ## Contents
 
 - `debug/radila/hdl/radila`: RadILA capture core and RadDebugHub AXI-Lite wrapper.
@@ -16,6 +19,9 @@ Current release-prep branch target: `0.2.2-beta.1`.
 - `common/hdl/src`: shared protocol and primitive wrappers, including vendor-neutral RAM/FIFO/CDC boundaries.
 - `common/hdl/testbenches`: shared primitive equivalence testbenches for GHDL and vendor simulators.
 - `scripts/radhdl_sim_matrix.py`: primitive simulation matrix runner for GHDL, Vivado/xsim, and XPM source probing.
+- `projects/examples/fpiga_audio_hat_shared_math`: Gowin GW5A FPiGA Audio Hat
+  shared-math DSP example with top-level I2C/I2S simulation and quick-look plot
+  generation.
 
 RadTools is responsible for compiled release installers. RadHDL is the source tree those installers should be built from.
 
