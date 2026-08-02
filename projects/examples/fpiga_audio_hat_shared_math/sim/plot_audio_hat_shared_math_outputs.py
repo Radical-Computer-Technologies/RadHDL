@@ -36,25 +36,27 @@ def display_name(name: str) -> str:
 
 
 def plot_capture(name: str, description: str, data: np.ndarray, sample_rate: int, plot_frames: int) -> None:
-    fig, axes = plt.subplots(3, 1, figsize=(12, 8), constrained_layout=True)
-    fig.suptitle(display_name(name), fontsize=14, fontweight="bold")
+    fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=False)
+    fig.suptitle(display_name(name), fontsize=14, fontweight="bold", y=0.98)
+    fig.text(0.5, 0.935, description, ha="center", va="top", fontsize=9.5, color="#4b5563")
+    fig.subplots_adjust(left=0.08, right=0.985, top=0.86, bottom=0.08, hspace=0.48)
 
     if data.size == 0:
         axes[0].text(0.5, 0.5, "No frames captured", ha="center", va="center", transform=axes[0].transAxes)
-        axes[0].set_title(description, fontsize=10)
+        axes[0].set_title("Left Channel", fontsize=11, loc="left", pad=8)
         axes[1].axis("off")
         axes[2].axis("off")
     else:
         n = min(len(data), plot_frames)
         t = np.arange(n) / sample_rate
         axes[0].plot(t, data[:n, 0], color="#1f77b4", linewidth=1.4)
-        axes[0].set_title("Left Channel")
+        axes[0].set_title("Left Channel", fontsize=11, loc="left", pad=8)
         axes[0].axhline(0, color="black", linewidth=0.8, alpha=0.35)
         axes[0].set_ylabel("Signed sample")
         axes[0].grid(True, alpha=0.25)
 
         axes[1].plot(t, data[:n, 1], color="#2ca02c", linewidth=1.4)
-        axes[1].set_title("Right Channel")
+        axes[1].set_title("Right Channel", fontsize=11, loc="left", pad=8)
         axes[1].set_xlabel("Time (s)")
         axes[1].axhline(0, color="black", linewidth=0.8, alpha=0.35)
         axes[1].set_ylabel("Signed sample")
@@ -69,7 +71,7 @@ def plot_capture(name: str, description: str, data: np.ndarray, sample_rate: int
             freqs = np.fft.rfftfreq(fft_len, d=1.0 / sample_rate)
             axes[2].plot(freqs, spectrum, color="#9467bd", linewidth=1.2)
             axes[2].set_xlim(0, min(sample_rate / 2, 6000))
-            axes[2].set_title("Left Channel FFT Quick Look")
+            axes[2].set_title("Left Channel FFT Quick Look", fontsize=11, loc="left", pad=8)
             axes[2].set_xlabel("Frequency (Hz)")
             axes[2].set_ylabel("Magnitude")
             axes[2].grid(True, alpha=0.25)
